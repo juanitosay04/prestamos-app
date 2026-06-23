@@ -6,7 +6,7 @@ export async function Header() {
   const session = await getSession()
 
   return (
-    <header className="h-16 border-b border-white/5 bg-black/40 backdrop-blur-xl flex items-center justify-between px-8 sticky top-0 z-10">
+    <header className="h-16 border-b border-white/5 bg-black/40 backdrop-blur-xl flex items-center justify-between px-4 pl-14 md:px-8 sticky top-0 z-10">
       <div className="flex items-center gap-4 flex-1">
         <GlobalSearch />
       </div>
