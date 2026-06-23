@@ -1,0 +1,186 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  role          String    @default("SECRETARY") // ADMIN o SECRETARY
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  
+  auditLogs     AuditLog[]
+}
+
+model Client {
+  id               String    @id @default(cuid())
+  firstName        String
+  lastName         String
+  idDocument       String    @unique // Cédula o DNI
+  phone            String
+  email            String?
+  address          String?
+  references       String?   // json o texto
+  creditHistory    String?   // json o texto
+  status           String    @default("ACTIVE") // ACTIVE, INACTIVE, DELINQUENT
+  isBlacklisted    Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  loans            Loan[]
+
+  @@index([deletedAt])
+}
+
+model Loan {
+  id               String    @id @default(cuid())
+  clientId         String
+  client           Client    @relation(fields: [clientId], references: [id])
+  
+  principalAmount  Int       // En centavos (ej: $100.00 = 10000)
+  interestRate     Float     // ej: 5.5 para 5.5%
+  interestType     String    // DAILY, WEEKLY, BIWEEKLY, MONTHLY, CUSTOM
+  
+  interestAmount   Int?      // Si se definió por monto fijo en vez de %
+  secretaryCommission Float  @default(0) // Valor numérico de la comisión
+  secretaryCommissionType String @default("PERCENTAGE_INTEREST") // FIXED_AMOUNT, PERCENTAGE_PRINCIPAL, PERCENTAGE_INTEREST
+  
+  startDate        DateTime
+  endDate          DateTime
+  numberOfInstallments Int
+  installmentAmount  Int     // Cuota fija calculada
+  
+  autoLateFee      Boolean   @default(true)
+  status           String    @default("ACTIVE") // ACTIVE, PAID, OVERDUE, DEFAULTED
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+  defaultedAt      DateTime?
+
+  investors        InvestorLoan[]
+  installments     Installment[]
+  payments         Payment[]
+  referredByInvestorId String? // ID of the investor who referred this loan
+
+  @@index([clientId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Investor {
+  id               String    @id @default(cuid())
+  name             String
+  phone            String?
+  email            String?
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  investments      InvestorLoan[]
+
+  @@index([deletedAt])
+}
+
+model InvestorLoan {
+  id               String    @id @default(cuid())
+  investorId       String
+  loanId           String
+  
+  investor         Investor  @relation(fields: [investorId], references: [id])
+  loan             Loan      @relation(fields: [loanId], references: [id])
+  
+  investedAmount   Int       // En centavos
+  participationPercentage Float // ej: 50.0 para 50%
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([investorId, loanId])
+  @@index([loanId])
+  @@index([investorId])
+}
+
+model Installment {
+  id               String    @id @default(cuid())
+  loanId           String
+  loan             Loan      @relation(fields: [loanId], references: [id])
+  
+  installmentNumber Int
+  dueDate          DateTime
+  expectedAmount   Int       // Total de la cuota
+  principalPart    Int       // Parte de capital
+  interestPart     Int       // Parte de interés
+  
+  status           String    @default("PENDING") // PENDING, PAID, PARTIAL, LATE
+  amountPaid       Int       @default(0)
+  lateFee          Int       @default(0)
+  
+  payments         Payment[]
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([loanId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model Payment {
+  id               String    @id @default(cuid())
+  loanId           String
+  loan             Loan      @relation(fields: [loanId], references: [id])
+  
+  installmentId    String?
+  installment      Installment? @relation(fields: [installmentId], references: [id])
+  
+  amountPaid       Int       // En centavos
+  paymentDate      DateTime  @default(now())
+  isPartial        Boolean   @default(false)
+  lateFeeApplied   Int       @default(0) // En centavos
+  type             String    @default("INSTALLMENT") // INSTALLMENT, PRINCIPAL
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  @@index([loanId])
+  @@index([installmentId])
+}
+
+model AuditLog {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  
+  action           String    // ej: "CREATE_LOAN", "DELETE_CLIENT"
+  entityType       String    // ej: "Loan", "Client"
+  entityId         String
+  details          String    // JSON string del cambio realizado
+  
+  createdAt        DateTime  @default(now())
+}
+
+model Expense {
+  id               String    @id @default(cuid())
+  description      String
+  amount           Int       // En centavos
+  date             DateTime  @default(now())
+  category         String    @default("OTHER") // OFFICE, SALARY, UTILITIES, OTHER
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+}
