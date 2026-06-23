@@ -16,11 +16,11 @@ export async function Header() {
         
         <div className="flex items-center gap-3 pl-4 border-l border-white/10">
           <div className="flex flex-col items-end hidden sm:flex">
-            <span className="text-sm font-medium text-white">{session?.name || "Usuario"}</span>
+            <span className="text-sm font-medium text-white">{session?.email?.split('@')[0] || "Usuario"}</span>
             <span className="text-xs text-muted-foreground">{session?.role === "ADMIN" ? "Administrador" : "Secretaria(o)"}</span>
           </div>
           <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-primary to-blue-600 flex items-center justify-center border border-white/10">
-            <span className="text-sm font-bold text-white">{session?.name?.charAt(0).toUpperCase() || "U"}</span>
+            <span className="text-sm font-bold text-white">{session?.email?.charAt(0).toUpperCase() || "U"}</span>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "./prisma"
-import { compare } from "bcrypt"
+
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -47,6 +47,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        // @ts-ignore
         token.role = user.role
         token.id = user.id
       }
