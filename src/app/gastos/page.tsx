@@ -1,4 +1,4 @@
-import { Sidebar } from "@/components/layout/Sidebar"
+import { SidebarServer as Sidebar } from "@/components/layout/SidebarServer"
 import { Header } from "@/components/layout/Header"
 import { prisma } from "@/lib/prisma"
 import { Receipt, Plus, Trash2 } from "lucide-react"

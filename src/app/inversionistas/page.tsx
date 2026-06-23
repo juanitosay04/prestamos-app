@@ -1,5 +1,6 @@
-import { Sidebar } from "@/components/layout/Sidebar"
+import { SidebarServer as Sidebar } from "@/components/layout/SidebarServer"
 import { Header } from "@/components/layout/Header"
+import { getSession } from "@/lib/session"
 import { getInvestors } from "@/app/actions/investor"
 import { Wallet, MoreVertical, FileEdit, Trash2, PieChart } from "lucide-react"
 import { NewInvestorButton } from "./NewInvestorButton"
@@ -8,6 +9,7 @@ import { DeleteInvestorButton } from "./DeleteInvestorButton"
 import Link from "next/link"
 
 export default async function InversionistasPage() {
+  const session = await getSession()
   const investors = await getInvestors()
 
   return (
@@ -25,7 +27,7 @@ export default async function InversionistasPage() {
                 <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Inversionistas</h1>
                 <p className="text-muted-foreground">Gestiona tu red de inversionistas y su capital.</p>
               </div>
-              <NewInvestorButton />
+              {session?.role === "ADMIN" && <NewInvestorButton />}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -102,8 +104,12 @@ export default async function InversionistasPage() {
                                 <Link href={`/inversionistas/${investor.id}`} className="p-2 text-primary hover:text-white hover:bg-primary/20 rounded-lg transition-colors flex items-center gap-1 text-xs font-medium" title="Ver Detalles">
                                   Ver Detalles
                                 </Link>
-                                <EditInvestorModal investor={{ id: investor.id, name: investor.name, phone: investor.phone, email: investor.email }} />
-                                <DeleteInvestorButton id={investor.id} />
+                                {session?.role === "ADMIN" && (
+                                  <>
+                                    <EditInvestorModal investor={{ id: investor.id, name: investor.name, phone: investor.phone, email: investor.email }} />
+                                    <DeleteInvestorButton id={investor.id} />
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>

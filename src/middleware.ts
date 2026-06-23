@@ -19,6 +19,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url))
   }
 
+  // RBAC: Secretarias no pueden entrar a gastos ni configuracion
+  if (session && session.role !== "ADMIN") {
+    if (path.startsWith("/gastos") || path.startsWith("/configuracion")) {
+      return NextResponse.redirect(new URL("/", request.url))
+    }
+  }
+
   // Inject session data into headers for the app
   const response = NextResponse.next()
   if (session) {

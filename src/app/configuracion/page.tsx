@@ -1,4 +1,4 @@
-import { Sidebar } from "@/components/layout/Sidebar"
+import { SidebarServer as Sidebar } from "@/components/layout/SidebarServer"
 import { Header } from "@/components/layout/Header"
 import { getUsers, deleteUser } from "@/app/actions/user"
 import { MoreVertical, Trash2, Shield, User as UserIcon } from "lucide-react"

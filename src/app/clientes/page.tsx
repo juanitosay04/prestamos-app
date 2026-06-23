@@ -1,4 +1,4 @@
-import { Sidebar } from "@/components/layout/Sidebar"
+import { SidebarServer as Sidebar } from "@/components/layout/SidebarServer"
 import { Header } from "@/components/layout/Header"
 import { getClients } from "@/app/actions/client"
 import { MoreVertical, FileEdit, Trash2, FileText, ShieldAlert } from "lucide-react"

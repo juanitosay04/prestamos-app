@@ -22,8 +22,15 @@ const navigation = [
   { name: "Gastos", href: "/gastos", icon: Receipt },
 ]
 
-export function Sidebar() {
+export function Sidebar({ role }: { role?: string }) {
   const pathname = usePathname()
+
+  const filteredNavigation = navigation.filter(item => {
+    if (role !== "ADMIN" && (item.name === "Gastos" || item.name === "Configuración")) {
+      return false
+    }
+    return true
+  })
 
   return (
     <div className="flex h-full w-64 flex-col border-r border-white/5 bg-black/40 backdrop-blur-xl">
@@ -38,7 +45,7 @@ export function Sidebar() {
 
       <div className="flex-1 overflow-y-auto py-6 px-4">
         <nav className="flex flex-col gap-1">
-          {navigation.map((item) => {
+          {filteredNavigation.map((item) => {
             const isActive = pathname === item.href
             const Icon = item.icon
             
@@ -62,13 +69,15 @@ export function Sidebar() {
 
       <div className="border-t border-white/5 p-4">
         <div className="flex flex-col gap-1">
-          <Link
-            href="/configuracion"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-white/5 hover:text-white transition-all"
-          >
-            <Settings className="h-5 w-5" />
-            Configuración
-          </Link>
+          {role === "ADMIN" && (
+            <Link
+              href="/configuracion"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-white/5 hover:text-white transition-all"
+            >
+              <Settings className="h-5 w-5" />
+              Configuración
+            </Link>
+          )}
           <button onClick={() => logout()} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-all text-left">
             <LogOut className="h-5 w-5" />
             Cerrar Sesión
