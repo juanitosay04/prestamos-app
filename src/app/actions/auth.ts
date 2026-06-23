@@ -7,7 +7,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
 export async function login(formData: FormData) {
-  const email = formData.get("email")?.toString()
+  const email = formData.get("email")?.toString().toLowerCase().trim()
   const password = formData.get("password")?.toString()
 
   if (!email || !password) {

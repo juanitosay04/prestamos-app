@@ -79,7 +79,7 @@ export default async function ExpensesPage() {
                             ${(expense.amount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <form action={async () => { "use server"; await deleteExpense(expense.id); }}>
+                            <form action={deleteExpense.bind(null, expense.id)}>
                               <button type="submit" className="p-2 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Eliminar">
                                 <Trash2 className="h-4 w-4" />
                               </button>
