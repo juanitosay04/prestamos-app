@@ -26,7 +26,7 @@ export async function createExpense(formData: FormData) {
       }
     })
 
-    revalidatePath("/gastos")
+    revalidatePath("/", "layout")
     return { success: true, expense }
   } catch (error: any) {
     console.error("Create expense error:", error)
@@ -40,7 +40,7 @@ export async function deleteExpense(id: string) {
       where: { id },
       data: { deletedAt: new Date() }
     })
-    revalidatePath("/gastos")
+    revalidatePath("/", "layout")
     return { success: true }
   } catch (error: any) {
     return { error: "No se pudo eliminar el gasto." }

@@ -5,6 +5,8 @@ import { Receipt, Plus, Trash2 } from "lucide-react"
 import { NewExpenseButton } from "./NewExpenseButton"
 import { deleteExpense } from "@/app/actions/expense"
 
+export const dynamic = "force-dynamic"
+
 export default async function ExpensesPage() {
   const expenses = await prisma.expense.findMany({
     where: { deletedAt: null },
