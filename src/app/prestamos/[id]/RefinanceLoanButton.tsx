@@ -118,7 +118,7 @@ export function RefinanceLoanButton({
 
     const result = await refinanceLoan(oldLoanId, data)
 
-    if (result.error) {
+    if (result && 'error' in result && result.error) {
       setError(result.error)
     } else {
       setIsOpen(false)

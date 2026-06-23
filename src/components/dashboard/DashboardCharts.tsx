@@ -50,7 +50,7 @@ export function DashboardCharts({ monthlyData, portfolioData }: DashboardChartsP
                 cursor={{ fill: '#ffffff05' }}
                 contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
                 itemStyle={{ fontSize: '13px', fontWeight: '500' }}
-                formatter={(value: number, name: string) => [`$${value.toLocaleString("es-CO", { maximumFractionDigits: 0 })}`, name]}
+                formatter={(value: any, name: string) => [`$${Number(value).toLocaleString("es-CO", { maximumFractionDigits: 0 })}`, name]}
                 labelStyle={{ color: '#94a3b8', marginBottom: '8px' }}
               />
               <Bar dataKey="Capital" stackId="a" fill="#3b82f6" radius={[0, 0, 4, 4]} barSize={40} />

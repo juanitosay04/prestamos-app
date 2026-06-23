@@ -35,7 +35,7 @@ export async function getLoans(month?: number, year?: number) {
     })
   } catch (error) {
     console.error("Error fetching loans:", error)
-    return { loans: [], totalActivePrincipal: 0, totalExpectedInterest: 0, totalActiveCount: 0 }
+    return []
   }
 }
 

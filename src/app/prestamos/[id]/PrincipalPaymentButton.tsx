@@ -38,7 +38,7 @@ export function PrincipalPaymentButton({ loanId, outstandingPrincipal }: Props) 
     }
 
     const res = await registerPrincipalPayment(loanId, amountInCents, adjustmentType)
-    if (res?.error) {
+    if (res && 'error' in res) {
       setError(res.error)
       setLoading(false)
     } else {
