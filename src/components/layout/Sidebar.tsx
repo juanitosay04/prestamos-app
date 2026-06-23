@@ -111,6 +111,7 @@ export function Sidebar({ role }: { role?: string }) {
           </button>
         </div>
       </div>
+      </div>
     </>
   )
 }
