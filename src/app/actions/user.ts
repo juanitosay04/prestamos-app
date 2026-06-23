@@ -58,7 +58,7 @@ export async function createUser(formData: FormData) {
 export async function updateUser(id: string, formData: FormData) {
   try {
     const name = formData.get("name") as string
-    const email = formData.get("email") as string
+    const email = formData.get("email")?.toString().toLowerCase().trim() || ""
     const role = formData.get("role") as string
     const password = formData.get("password") as string
 
@@ -85,5 +85,17 @@ export async function updateUser(id: string, formData: FormData) {
       return { error: "Ya existe otro usuario con este correo electrónico" }
     }
     return { error: "Error al actualizar el usuario" }
+  }
+}
+
+export async function deleteUser(id: string) {
+  try {
+    await prisma.user.delete({
+      where: { id }
+    })
+    revalidatePath("/configuracion")
+    return { success: true }
+  } catch (error: any) {
+    return { error: "No se pudo eliminar el usuario." }
   }
 }

@@ -1,6 +1,6 @@
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Header } from "@/components/layout/Header"
-import { getUsers } from "@/app/actions/user"
+import { getUsers, deleteUser } from "@/app/actions/user"
 import { MoreVertical, Trash2, Shield, User as UserIcon } from "lucide-react"
 import { NewUserButton } from "./NewUserButton"
 import { EditUserButton } from "./EditUserButton"
@@ -78,9 +78,11 @@ export default async function ConfiguracionPage() {
                           <td className="px-6 py-4 text-right">
                             <div className="flex justify-end gap-2">
                               <EditUserButton user={user} />
-                              <button className="p-2 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Eliminar">
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              <form action={deleteUser.bind(null, user.id)}>
+                                <button type="submit" className="p-2 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Eliminar">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </form>
                             </div>
                           </td>
                         </tr>
