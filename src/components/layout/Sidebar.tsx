@@ -35,7 +35,7 @@ export function Sidebar({ role }: { role?: string }) {
   }, [pathname])
 
   const filteredNavigation = navigation.filter(item => {
-    if (role !== "ADMIN" && (item.name === "Gastos" || item.name === "Configuración")) {
+    if (role !== "ADMIN" && (item.name === "Gastos" || item.name === "Configuración" || item.name === "Inversionistas")) {
       return false
     }
     return true

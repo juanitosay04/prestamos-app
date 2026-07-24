@@ -55,7 +55,7 @@ export default async function Dashboard() {
   // Ingresos del Mes (Intereses de cuotas de este mes)
   const currentMonthInstallments = await prisma.installment.findMany({
     where: {
-      loan: { deletedAt: null },
+      loan: { deletedAt: null, status: { not: "REFINANCED" } },
       dueDate: {
         gte: startOfMonth,
         lte: endOfMonth
@@ -75,7 +75,10 @@ export default async function Dashboard() {
   const monthlyNetProfit = monthlyExpectedIncome - monthlyExpenses
 
   const upcomingInstallments = await prisma.installment.findMany({
-    where: { status: "PENDING" },
+    where: { 
+      status: "PENDING",
+      loan: { status: { not: "REFINANCED" }, deletedAt: null }
+    },
     orderBy: { dueDate: "asc" },
     take: 5,
     include: { loan: { include: { client: true } } }
@@ -99,7 +102,7 @@ export default async function Dashboard() {
   
   const installments = await prisma.installment.findMany({
     where: {
-      loan: { deletedAt: null },
+      loan: { deletedAt: null, status: { not: "REFINANCED" } },
       dueDate: {
         gte: new Date(today.getFullYear(), today.getMonth(), 1), // Start of current month
         lte: sixMonthsFromNow

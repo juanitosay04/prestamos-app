@@ -13,6 +13,10 @@ export async function payInstallment(installmentId: string, lateFeeInCents: numb
     if (!installment) {
       return { error: "Cuota no encontrada" }
     }
+    
+    if (installment.loan.status === "REFINANCED") {
+      return { error: "No se pueden recibir pagos en préstamos refinanciados." }
+    }
 
     if (installment.status === "PAID") {
       return { error: "Esta cuota ya está pagada" }

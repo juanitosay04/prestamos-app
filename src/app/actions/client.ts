@@ -24,6 +24,9 @@ export async function createClient(formData: FormData) {
     const phone = formData.get("phone") as string
     const email = formData.get("email") as string
     const address = formData.get("address") as string
+    const city = formData.get("city") as string
+    const neighborhood = formData.get("neighborhood") as string
+    const addressOptions = formData.get("addressOptions") as string
 
     if (!firstName || !lastName || !idDocument || !phone) {
       return { error: "Faltan campos obligatorios" }
@@ -36,7 +39,10 @@ export async function createClient(formData: FormData) {
         idDocument,
         phone,
         email: email || null,
+        city: city || null,
+        neighborhood: neighborhood || null,
         address: address || null,
+        addressOptions: addressOptions || null,
         status: "ACTIVE"
       }
     })

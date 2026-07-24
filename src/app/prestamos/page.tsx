@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/Header"
 import { getLoans } from "@/app/actions/loan"
 import { getClients } from "@/app/actions/client"
 import { getInvestors } from "@/app/actions/investor"
+import { getSession } from "@/lib/session"
 import { Briefcase, Calendar, CheckCircle2, AlertCircle, FileText } from "lucide-react"
 import { NewLoanButton } from "./NewLoanButton"
 import { MonthFilter } from "./MonthFilter"
@@ -14,6 +15,9 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
   const { month, year, status } = await searchParams
   const filterMonth = month ? parseInt(month) : undefined
   const filterYear = year ? parseInt(year) : undefined
+  
+  const session = await getSession()
+  const role = session?.role || "SECRETARY"
 
   const allLoans = await getLoans(filterMonth, filterYear)
   const clients = await getClients()
@@ -111,7 +115,7 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
               <div className="flex items-center gap-4">
                 <StatusFilter currentStatus={status} />
                 <MonthFilter />
-                <NewLoanButton clients={mappedClients} investors={mappedInvestors} />
+                <NewLoanButton clients={mappedClients} investors={mappedInvestors} userRole={role} />
               </div>
             </div>
 

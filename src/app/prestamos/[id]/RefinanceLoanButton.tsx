@@ -12,12 +12,14 @@ export function RefinanceLoanButton({
   oldLoanId, 
   clientId, 
   availableInvestors,
+  currentInvestors,
   currentPrincipal,
   totalExpected
 }: { 
   oldLoanId: string
   clientId: string
   availableInvestors: Investor[]
+  currentInvestors?: { investorId: string, participationPercentage: number }[]
   currentPrincipal: number
   totalExpected: number
 }) {
@@ -32,7 +34,13 @@ export function RefinanceLoanButton({
   const [interestValue, setInterestValue] = useState("5")
   const [numberOfInstallments, setNumberOfInstallments] = useState("12")
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0])
-  const [selectedInvestors, setSelectedInvestors] = useState<{investorId: string, percentage: string}[]>([])
+  const [upfrontFee, setUpfrontFee] = useState("0")
+  
+  const initialInvestors = currentInvestors 
+    ? currentInvestors.map(i => ({ investorId: i.investorId, percentage: i.participationPercentage.toString() }))
+    : []
+    
+  const [selectedInvestors, setSelectedInvestors] = useState<{investorId: string, percentage: string}[]>(initialInvestors)
 
   const currentTotalPercentage = selectedInvestors.reduce((sum, inv) => sum + (parseFloat(inv.percentage) || 0), 0)
   const [preview, setPreview] = useState<{installmentAmount: number, totalInterest: number} | null>(null)
@@ -110,10 +118,12 @@ export function RefinanceLoanButton({
       principalAmount: principal,
       interestRate,
       interestAmount: interestAmountVal,
+      upfrontFee: Math.round((parseFloat(upfrontFee) || 0) * 100),
       interestType,
       startDate,
       numberOfInstallments: parseInt(numberOfInstallments),
-      investors: formattedInvestors
+      investors: formattedInvestors,
+      refinancedFromId: oldLoanId
     }
 
     const result = await refinanceLoan(oldLoanId, data)
@@ -169,6 +179,16 @@ export function RefinanceLoanButton({
                   value={principalAmount}
                   onChange={(val) => { setPrincipalAmount(val); setPreview(null); }}
                   className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors text-lg font-bold" 
+                />
+              </div>
+
+              {/* Cobros Adicionales */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Cobro Único Inicial (Seguro, 4x1000, etc) $</label>
+                <CurrencyInput 
+                  value={upfrontFee}
+                  onChange={(val) => setUpfrontFee(val)}
+                  className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" 
                 />
               </div>
 

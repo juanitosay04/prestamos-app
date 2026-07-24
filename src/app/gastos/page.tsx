@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/Header"
 import { prisma } from "@/lib/prisma"
 import { Receipt, Plus, Trash2 } from "lucide-react"
 import { NewExpenseButton } from "./NewExpenseButton"
+import { DeleteExpenseButton } from "./DeleteExpenseButton"
 import { deleteExpense } from "@/app/actions/expense"
 
 export const dynamic = "force-dynamic"
@@ -81,11 +82,7 @@ export default async function ExpensesPage() {
                             ${(expense.amount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <form action={deleteExpense.bind(null, expense.id)}>
-                              <button type="submit" className="p-2 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Eliminar">
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </form>
+                            <DeleteExpenseButton expenseId={expense.id} />
                           </td>
                         </tr>
                       ))

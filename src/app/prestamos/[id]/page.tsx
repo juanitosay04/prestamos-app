@@ -8,8 +8,10 @@ import { InstallmentBreakdown } from "./InstallmentBreakdown"
 import { WhatsAppReminderButton } from "./WhatsAppReminderButton"
 import { RefinanceLoanButton } from "./RefinanceLoanButton"
 import { PrintClearanceButton } from "./PrintClearanceButton"
+import { PrintClearanceButton } from "./PrintClearanceButton"
 import { PrincipalPaymentButton } from "./PrincipalPaymentButton"
 import { MarkDefaultedButton, ReviveLoanButton } from "./DefaultLoanButtons"
+import { getSession } from "@/lib/session"
 
 export default async function LoanDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -26,6 +28,9 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
       }
     }
   })
+
+  const session = await getSession()
+  const role = session?.role || "SECRETARY"
 
   if (!loan) {
     return <div className="text-white p-8">Préstamo no encontrado</div>
@@ -81,12 +86,13 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                       oldLoanId={loan.id}
                       clientId={loan.clientId}
                       availableInvestors={allInvestors}
+                      currentInvestors={loan.investors}
                       currentPrincipal={loan.principalAmount}
                       totalExpected={totalExpected}
                     />
-                    <MarkDefaultedButton loanId={loan.id} />
+                    {role === "ADMIN" && <MarkDefaultedButton loanId={loan.id} />}
                   </div>
-                ) : loan.status === "DEFAULTED" ? (
+                ) : loan.status === "DEFAULTED" && role === "ADMIN" ? (
                   <ReviveLoanButton loanId={loan.id} />
                 ) : null}
                 {loan.status === "PAID" && (

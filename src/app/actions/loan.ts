@@ -121,6 +121,7 @@ export async function createLoan(data: any) {
       interestType, // "MONTHLY", "WEEKLY", "BIWEEKLY", "DAILY"
       secretaryCommission,
       secretaryCommissionType,
+      upfrontFee, // Add upfrontFee
       startDate,
       numberOfInstallments,
       investors, // Array of { investorId, participationPercentage, investedAmount }
@@ -133,25 +134,37 @@ export async function createLoan(data: any) {
       return { error: "Este cliente se encuentra en la lista negra por impago y no puede recibir nuevos préstamos." }
     }
 
-    // 1. Calculate Total Interest
-    let totalInterestInCents = 0
-    if (interestAmount && interestAmount > 0) {
-      totalInterestInCents = interestAmount
-    } else {
-      // Calculate total interest based on rate.
-      // Assuming Simple Interest: Principal * Rate * Periods
-      totalInterestInCents = Math.round(principalAmount * (interestRate / 100) * numberOfInstallments)
-    }
-
-    // 2. Calculate Installments
-    const principalPerInstallment = Math.round(principalAmount / numberOfInstallments)
-    const interestPerInstallment = Math.round(totalInterestInCents / numberOfInstallments)
-    const installmentAmount = principalPerInstallment + interestPerInstallment
-
-    // Calculate End Date and Installment Dates
+    // 1. Calculate Installments (Amortización Francesa)
     const installmentsData: any[] = []
     let currentDate = new Date(startDate)
     
+    let isFrench = false
+    let fixedInstallmentAmount = 0
+    let totalInterestInCents = 0
+    let iRate = interestRate / 100
+
+    if (interestAmount && interestAmount > 0) {
+      // Fixed total interest
+      totalInterestInCents = interestAmount
+      const pPart = Math.round(principalAmount / numberOfInstallments)
+      const iPart = Math.round(totalInterestInCents / numberOfInstallments)
+      fixedInstallmentAmount = pPart + iPart
+    } else if (numberOfInstallments === 1) {
+      // 1 installment -> Simple Interest
+      totalInterestInCents = Math.round(principalAmount * iRate)
+      fixedInstallmentAmount = principalAmount + totalInterestInCents
+    } else {
+      // French Amortization
+      isFrench = true
+      if (iRate > 0) {
+        fixedInstallmentAmount = Math.round(principalAmount * (iRate / (1 - Math.pow(1 + iRate, -numberOfInstallments))))
+      } else {
+        fixedInstallmentAmount = Math.round(principalAmount / numberOfInstallments)
+      }
+    }
+
+    let outstandingPrincipal = principalAmount
+
     for (let i = 1; i <= numberOfInstallments; i++) {
       if (interestType === "MONTHLY") {
         currentDate = addMonths(currentDate, 1)
@@ -163,12 +176,30 @@ export async function createLoan(data: any) {
         currentDate = addDays(currentDate, 1)
       }
       
+      let interestPart = 0
+      let principalPart = 0
+
+      if (isFrench) {
+        if (i === numberOfInstallments) {
+          // Last installment adjusts to exact remaining principal
+          principalPart = outstandingPrincipal
+          interestPart = fixedInstallmentAmount - principalPart
+        } else {
+          interestPart = Math.round(outstandingPrincipal * iRate)
+          principalPart = fixedInstallmentAmount - interestPart
+        }
+        outstandingPrincipal -= principalPart
+      } else {
+        principalPart = Math.round(principalAmount / numberOfInstallments)
+        interestPart = Math.round(totalInterestInCents / numberOfInstallments)
+      }
+      
       installmentsData.push({
         installmentNumber: i,
         dueDate: currentDate,
-        expectedAmount: installmentAmount,
-        principalPart: principalPerInstallment,
-        interestPart: interestPerInstallment,
+        expectedAmount: fixedInstallmentAmount,
+        principalPart: principalPart,
+        interestPart: interestPart,
         status: "PENDING",
         amountPaid: 0,
         lateFee: 0
@@ -188,10 +219,11 @@ export async function createLoan(data: any) {
           interestAmount: interestAmount || null,
           secretaryCommission: secretaryCommission,
           secretaryCommissionType: secretaryCommissionType as any,
+          upfrontFee: upfrontFee || 0,
           startDate: new Date(startDate),
           endDate,
           numberOfInstallments,
-          installmentAmount,
+          installmentAmount: fixedInstallmentAmount,
           status: "ACTIVE",
           referredByInvestorId: referredByInvestorId || null,
           // Relaciones
@@ -289,6 +321,7 @@ export async function registerPrincipalPayment(
       })
 
       if (!loan) throw new Error("Préstamo no encontrado")
+      if (loan.status === "REFINANCED") throw new Error("No se pueden recibir pagos en préstamos refinanciados")
       if (loan.installments.length === 0) throw new Error("No hay cuotas pendientes para aplicar abono a capital")
 
       // Registrar el pago como PRINCIPAL
@@ -328,65 +361,88 @@ export async function registerPrincipalPayment(
       }
 
       // Si aún queda capital, recalcular según el método elegido
+      const isFrench = loan.interestRate > 0 && loan.installments.length > 1
+      const iRate = loan.interestRate / 100
+
       if (adjustmentType === "REDUCE_AMOUNT") {
         // REDUCIR CUOTA: Mismo número de cuotas, menor valor
         const numPending = loan.installments.length
-        const newPrincipalPerInst = Math.round(newOutstandingPrincipal / numPending)
         
-        let newInterestPerInst = 0
-        if (loan.interestRate > 0) {
-          // Recalcular interés total basado en el nuevo saldo y dividirlo (Interés Simple)
-          const newRemainingInterest = Math.round(newOutstandingPrincipal * (loan.interestRate / 100) * numPending)
-          newInterestPerInst = Math.round(newRemainingInterest / numPending)
+        let newExpectedAmount = 0
+        if (isFrench) {
+          newExpectedAmount = Math.round(newOutstandingPrincipal * (iRate / (1 - Math.pow(1 + iRate, -numPending))))
         } else {
-          // Si era monto fijo precalculado, mantenemos el mismo interés (la parte de interés no se reduce, solo capital)
-          newInterestPerInst = loan.installments[0].interestPart
+          // Simple or fixed interest logic unchanged for this branch
+          const newRemainingInterest = loan.interestRate > 0 
+            ? Math.round(newOutstandingPrincipal * iRate * numPending) 
+            : (loan.installments[0].interestPart * numPending)
+          newExpectedAmount = Math.round((newOutstandingPrincipal + newRemainingInterest) / numPending)
         }
 
-        const newExpectedAmount = newPrincipalPerInst + newInterestPerInst
-
-        for (const inst of loan.installments) {
+        let tempPrincipal = newOutstandingPrincipal
+        
+        for (let i = 0; i < loan.installments.length; i++) {
+          const inst = loan.installments[i]
+          let pPart = 0
+          let iPart = 0
+          
+          if (isFrench) {
+            if (i === loan.installments.length - 1) {
+              pPart = tempPrincipal
+              iPart = newExpectedAmount - pPart
+            } else {
+              iPart = Math.round(tempPrincipal * iRate)
+              pPart = newExpectedAmount - iPart
+            }
+            tempPrincipal -= pPart
+          } else {
+            pPart = Math.round(newOutstandingPrincipal / numPending)
+            iPart = newExpectedAmount - pPart
+          }
+          
           await tx.installment.update({
             where: { id: inst.id },
             data: {
-              principalPart: newPrincipalPerInst,
-              interestPart: newInterestPerInst,
+              principalPart: pPart,
+              interestPart: iPart,
               expectedAmount: newExpectedAmount
             }
           })
         }
 
       } else if (adjustmentType === "REDUCE_TERM") {
-        // REDUCIR PLAZO: Misma cuota de capital, se recortan cuotas
-        const originalPrincipalPerInst = loan.installments[0].principalPart
-        const originalInterestPerInst = loan.installments[0].interestPart
+        // REDUCIR PLAZO: Misma cuota, se recortan cuotas
+        const fixedInstallmentAmount = loan.installmentAmount
+        let tempPrincipal = newOutstandingPrincipal
         
-        // Número de cuotas que quedan completas
-        const newNumPending = Math.ceil(newOutstandingPrincipal / originalPrincipalPerInst)
-        
-        let remainingPrincipalToDistribute = newOutstandingPrincipal
-
         for (let i = 0; i < loan.installments.length; i++) {
           const inst = loan.installments[i]
           
-          if (i < newNumPending) {
-            // Asignar capital
-            const capitalToAssign = Math.min(originalPrincipalPerInst, remainingPrincipalToDistribute)
-            remainingPrincipalToDistribute -= capitalToAssign
+          if (tempPrincipal > 0) {
+            let iPart = 0
+            let pPart = 0
             
-            // Asignar interés
-            let interestToAssign = originalInterestPerInst
-            if (loan.interestRate > 0) {
-               // El interés mensual/semanal es % del capital restante
-               interestToAssign = Math.round(newOutstandingPrincipal * (loan.interestRate / 100))
+            if (isFrench) {
+              iPart = Math.round(tempPrincipal * iRate)
+              pPart = fixedInstallmentAmount - iPart
+              
+              if (pPart > tempPrincipal) {
+                pPart = tempPrincipal
+                // Last installment is smaller
+              }
+            } else {
+              pPart = Math.min(loan.installments[0].principalPart, tempPrincipal)
+              iPart = loan.installments[0].interestPart // keep original fixed interest part
             }
+            
+            tempPrincipal -= pPart
             
             await tx.installment.update({
               where: { id: inst.id },
               data: {
-                principalPart: capitalToAssign,
-                interestPart: interestToAssign,
-                expectedAmount: capitalToAssign + interestToAssign
+                principalPart: pPart,
+                interestPart: iPart,
+                expectedAmount: pPart + iPart
               }
             })
           } else {

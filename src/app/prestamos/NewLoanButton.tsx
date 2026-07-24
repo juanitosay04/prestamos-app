@@ -9,7 +9,7 @@ import toast from "react-hot-toast"
 type Client = { id: string, firstName: string, lastName: string, idDocument: string, isBlacklisted?: boolean }
 type Investor = { id: string, name: string }
 
-export function NewLoanButton({ clients, investors }: { clients: Client[], investors: Investor[] }) {
+export function NewLoanButton({ clients, investors, userRole }: { clients: Client[], investors: Investor[], userRole?: string }) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -20,6 +20,7 @@ export function NewLoanButton({ clients, investors }: { clients: Client[], inves
   const [interestType, setInterestType] = useState("MONTHLY")
   const [interestCalculation, setInterestCalculation] = useState("AMOUNT") // AMOUNT or RATE
   const [interestValue, setInterestValue] = useState("")
+  const [upfrontFee, setUpfrontFee] = useState("0")
   const [secretaryCommissionType, setSecretaryCommissionType] = useState("PERCENTAGE_INTEREST")
   const [secretaryCommission, setSecretaryCommission] = useState("0")
   const [numberOfInstallments, setNumberOfInstallments] = useState("1")
@@ -124,6 +125,7 @@ export function NewLoanButton({ clients, investors }: { clients: Client[], inves
       interestAmount: interestAmountVal,
       secretaryCommission: secComm,
       secretaryCommissionType,
+      upfrontFee: Math.round((parseFloat(upfrontFee) || 0) * 100),
       interestType,
       startDate,
       numberOfInstallments: parseInt(numberOfInstallments),
@@ -265,51 +267,63 @@ export function NewLoanButton({ clients, investors }: { clients: Client[], inves
                 </div>
               </div>
 
-              {/* Comisión Secretaria */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
-                <div className="flex flex-col gap-1.5 justify-center">
-                  <h3 className="text-sm font-bold text-blue-400">Comisión de Secretaria</h3>
-                  <p className="text-xs text-muted-foreground">Esta comisión se generará como gasto al finalizar el préstamo.</p>
-                </div>
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-blue-300">Tipo de Comisión</label>
-                    <select 
-                      value={secretaryCommissionType}
-                      onChange={e => setSecretaryCommissionType(e.target.value)}
-                      className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                    >
-                      <option value="PERCENTAGE_INTEREST" className="bg-background">% sobre los Intereses</option>
-                      <option value="PERCENTAGE_PRINCIPAL" className="bg-background">% sobre el Capital</option>
-                      <option value="FIXED_AMOUNT" className="bg-background">Monto Fijo en Dinero ($)</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-blue-300">
-                      {secretaryCommissionType === "FIXED_AMOUNT" ? "Valor ($)" : "Porcentaje (%)"}
-                    </label>
-                    {secretaryCommissionType === "FIXED_AMOUNT" ? (
-                      <CurrencyInput 
-                        required 
-                        value={secretaryCommission}
-                        onChange={(val) => setSecretaryCommission(val)}
-                        className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2 text-blue-100 focus:outline-none focus:border-blue-500 transition-colors" 
-                      />
-                    ) : (
-                      <input 
-                        required 
-                        type="number" 
-                        step="0.1"
-                        min="0"
-                        max="100"
-                        value={secretaryCommission}
-                        onChange={e => setSecretaryCommission(e.target.value)}
-                        className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2 text-blue-100 focus:outline-none focus:border-blue-500 transition-colors" 
-                      />
-                    )}
-                  </div>
-                </div>
+              {/* Cobros Adicionales */}
+              <div className="flex flex-col gap-1.5 p-4 rounded-xl border border-white/5 bg-white/5">
+                <label className="text-sm font-medium text-muted-foreground">Cobro Único Inicial (Seguro, 4x1000, etc) $</label>
+                <CurrencyInput 
+                  value={upfrontFee}
+                  onChange={(val) => setUpfrontFee(val)}
+                  className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary transition-colors" 
+                />
               </div>
+
+              {/* Comisión Secretaria */}
+              {userRole === "ADMIN" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
+                  <div className="flex flex-col gap-1.5 justify-center">
+                    <h3 className="text-sm font-bold text-blue-400">Comisión de Secretaria</h3>
+                    <p className="text-xs text-muted-foreground">Esta comisión se generará como gasto al finalizar el préstamo.</p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-blue-300">Tipo de Comisión</label>
+                      <select 
+                        value={secretaryCommissionType}
+                        onChange={e => setSecretaryCommissionType(e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                      >
+                        <option value="PERCENTAGE_INTEREST" className="bg-background">% sobre los Intereses</option>
+                        <option value="PERCENTAGE_PRINCIPAL" className="bg-background">% sobre el Capital</option>
+                        <option value="FIXED_AMOUNT" className="bg-background">Monto Fijo en Dinero ($)</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-blue-300">
+                        {secretaryCommissionType === "FIXED_AMOUNT" ? "Valor ($)" : "Porcentaje (%)"}
+                      </label>
+                      {secretaryCommissionType === "FIXED_AMOUNT" ? (
+                        <CurrencyInput 
+                          required 
+                          value={secretaryCommission}
+                          onChange={(val) => setSecretaryCommission(val)}
+                          className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2 text-blue-100 focus:outline-none focus:border-blue-500 transition-colors" 
+                        />
+                      ) : (
+                        <input 
+                          required 
+                          type="number" 
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          value={secretaryCommission}
+                          onChange={e => setSecretaryCommission(e.target.value)}
+                          className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2 text-blue-100 focus:outline-none focus:border-blue-500 transition-colors" 
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Sección 3: Cuotas */}
               <div className="grid grid-cols-2 gap-4">

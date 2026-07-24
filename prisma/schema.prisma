@@ -29,7 +29,10 @@ model Client {
   idDocument       String    @unique // Cédula o DNI
   phone            String
   email            String?
+  city             String?
+  neighborhood     String?
   address          String?
+  addressOptions   String?   // Torre, Apto, etc.
   references       String?   // json o texto
   creditHistory    String?   // json o texto
   status           String    @default("ACTIVE") // ACTIVE, INACTIVE, DELINQUENT
@@ -55,6 +58,7 @@ model Loan {
   interestAmount   Int?      // Si se definió por monto fijo en vez de %
   secretaryCommission Float  @default(0) // Valor numérico de la comisión
   secretaryCommissionType String @default("PERCENTAGE_INTEREST") // FIXED_AMOUNT, PERCENTAGE_PRINCIPAL, PERCENTAGE_INTEREST
+  upfrontFee       Int       @default(0) // Cobro único inicial (ej: seguro + 4x1000)
   
   startDate        DateTime
   endDate          DateTime
@@ -62,7 +66,7 @@ model Loan {
   installmentAmount  Int     // Cuota fija calculada
   
   autoLateFee      Boolean   @default(true)
-  status           String    @default("ACTIVE") // ACTIVE, PAID, OVERDUE, DEFAULTED
+  status           String    @default("ACTIVE") // ACTIVE, PAID, OVERDUE, DEFAULTED, REFINANCED
   
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -73,6 +77,7 @@ model Loan {
   installments     Installment[]
   payments         Payment[]
   referredByInvestorId String? // ID of the investor who referred this loan
+  refinancedFromId String? // ID del préstamo original si fue refinanciado
 
   @@index([clientId])
   @@index([status])
