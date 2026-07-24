@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/Header"
 import { getClients } from "@/app/actions/client"
 import { MoreVertical, FileEdit, Trash2, FileText, ShieldAlert } from "lucide-react"
 import { NewClientButton } from "./NewClientButton"
+import { EditClientModal } from "./EditClientModal"
 import { BlacklistToggleButton } from "./BlacklistToggleButton"
 import { ClientStatusFilter } from "./ClientStatusFilter"
 
@@ -88,9 +89,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
                         <button className="p-2 text-muted-foreground hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Ver Préstamos">
                           <FileText className="h-4 w-4" />
                         </button>
-                        <button className="p-2 text-muted-foreground hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Editar">
-                          <FileEdit className="h-4 w-4" />
-                        </button>
+                        <EditClientModal client={cliente} />
                       </div>
                     </div>
                   ))
@@ -150,9 +149,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
                               <button className="p-2 text-muted-foreground hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Ver Préstamos">
                                 <FileText className="h-4 w-4" />
                               </button>
-                              <button className="p-2 text-muted-foreground hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Editar">
-                                <FileEdit className="h-4 w-4" />
-                              </button>
+                              <EditClientModal client={cliente} />
                             </div>
                           </td>
                         </tr>

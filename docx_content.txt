@@ -1,0 +1,142 @@
+CIUDAD BARRIO Y OPCIONES COMO (TOORE APTO ETC)
+NO ME SRIVEN 
+ELLA NO DEBERIA DEFINIR SU COMISION SERIAMOS SOLO NOSOTROS SI NO NOS TUMBA COLOCANDO SUS PORCENTAJE, PARA PREVENIR CON SANCIONES TEC 
+La formula es 
+capital por interés mas el 4*1000 del capital +14 mil de 
+memebresia
+ seguros entre otros gastos
+ 
+Me 
+equivoque
+ y no puse los inversionistas y no puedo editar 
+No puedo crear inversionistas 
+No entendí para que es el 2 
+y si encaso eso toque pasárselo a un cliente daría datos de la empresa o sea mal no puede 
+filtarse
+ información que no necesiten de cuanto ganamos 
+etc
+ (EXPLICAR)
+Hoy es 23-06-2026 y esta ya se pago por ¿
+Ella no define que es perdida eso lo definimos tu y yo 
+Necesito también modificar cuanto se gana por prestamos JYJ 
+5 millones y me gano 2 600 puta y preste 50 que puta que 
+oferton
+ 
+Debería calcular la fecha des el mes siguiente no se puede pagar el mismo mes a menos que sea semanal o quincenal 
+Nod 
+eja
+ añadir inversionistas
+314515
+0
+Refinancie una obligación y la anterior obligación sigue vigente 
+Esta vuelta 
+esta
+ muy pequeña visualmente 
+Si ya pago unas cuotas debería mostrar cuanto le hace falta para pagar en capital y en intereses par saber que monto refinanciar 
+No debería dejarme hacer mas nada con este préstamo
+Como se cual es el 
+refinnaicado
+ de cual ¿ 
+Se me fue un cero de 
+mas
+ ahí que 
+¿ como
+ edito o que opción 
+hay  debería
+ decirme si es seguro o algo 
+Ya 
+cobre
+ y no me arrojo 
+nadaaaaaaaaaaaaaa
+No veo la comisión de el asistente, y 
+Y la mora ¿??? Ahí dice que a JYJ le toca 44 y esas 50k de mora que 
+¿ se
+ las mamo la 
+trga
+ perras ¿
+Debería mostrarme la mora cobrada aparte 
+AJJAJAJAJJA la 
+fomrula
+ es que si hace un abono a capital es que las cuotas se reduzcan las cuotas o el interés por cada cuota que paga 
+jajajja
+ 
+Si se hicieron abonos a capital donde se ve en el desglose ¿
+ADMIN 
+DEBERIA PREGUNTARME SI QUIERO ELIMINARLA 
+274337
+0
+ALGO ASI
++
+COLOCAR EN 
+VALOR  MAS
+ QUE TODO 
+SI SE REFINANCIA DEBERIA JAR AL INVERSIONISTA QUE SE TENIA PARA NO PERDER EL HILO DE CUANTO APORTO
+Siento que vamos a tener un error de análisis porque 
+dira
+ a me deben 100k cuando el otro fue refinanciado 
+ABONO DE CAPITAL
+}
+Modelo
+ de cuota fija (sistema francés)
+Cuota
+=P×
+i
+1-(1+i
+)
+-n
+Donde P = capital, i = tasa mensual (13% = 0.13), n = número de meses.
+Ejemplo: $3.000.000 a 6 meses, 13% mensual
+ → Cuota fija ≈ 
+$750.454/mes
+Mes
+Saldo inicial
+Interés (13%)
+Cuota
+Abono a capital
+Saldo final
+1
+3.000.000
+390.000
+750.454
+360.454
+2.639.546
+2
+2.639.546
+343.141
+750.454
+407.313
+2.232.233
+3
+2.232.233
+290.190
+750.454
+460.264
+1.771.969
+4
+1.771.969
+230.356
+750.454
+520.098
+1.251.871
+5
+1.251.871
+162.743
+750.454
+587.711
+664.160
+6
+664.160
+86.341
+750.501*
+664.160
+0
+*último pago se ajusta para saldar exacto.
+Qué pasa con un abono extra a capital
+Supón que al final del mes 2 (saldo $2.232.233) el cliente abona $500.000 extra → nuevo saldo $1.732.233. Dos caminos:
+Opción A — reducir plazo (mantener cuota $750.454):
+ el préstamo se termina de pagar en el mes 5 en lugar del 6. Interés total: ≈$1.194.982 (ahorra ≈$308.000 vs. plan original).
+Opción B — reducir cuota (mantener los 6 meses):
+ la cuota baja a ≈$581.920/mes. Interés total: ≈$1.330.754 (ahorra menos que la opción A).
+Confirma lo que te dije antes: 
+reducir plazo ahorra más interés que reducir cuota
+, porque sacas saldo expuesto más rápido.
