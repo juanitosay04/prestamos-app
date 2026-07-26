@@ -5,12 +5,33 @@ import { Receipt, Plus, Trash2 } from "lucide-react"
 import { NewExpenseButton } from "./NewExpenseButton"
 import { DeleteExpenseButton } from "./DeleteExpenseButton"
 import { deleteExpense } from "@/app/actions/expense"
+import { MonthFilter } from "@/app/prestamos/MonthFilter"
 
 export const dynamic = "force-dynamic"
 
-export default async function ExpensesPage() {
+export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ month?: string, year?: string }> }) {
+  const { month, year } = await searchParams
+  
+  const filterMonth = month ? parseInt(month) : undefined
+  const filterYear = year ? parseInt(year) : undefined
+
+  let dateFilter = {}
+  if (filterMonth && filterYear) {
+    const startDate = new Date(filterYear, filterMonth - 1, 1)
+    const endDate = new Date(filterYear, filterMonth, 0, 23, 59, 59, 999)
+    dateFilter = {
+      date: {
+        gte: startDate,
+        lte: endDate
+      }
+    }
+  }
+
   const expenses = await prisma.expense.findMany({
-    where: { deletedAt: null },
+    where: { 
+      deletedAt: null,
+      ...dateFilter
+    },
     orderBy: { date: "desc" }
   })
 
@@ -29,7 +50,10 @@ export default async function ExpensesPage() {
                 <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Gastos Administrativos</h1>
                 <p className="text-muted-foreground">Controla los egresos operativos (caja menor, salarios, papelería).</p>
               </div>
-              <NewExpenseButton />
+              <div className="flex items-center gap-4">
+                <MonthFilter basePath="/gastos" />
+                <NewExpenseButton />
+              </div>
             </div>
             
             <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group mb-8 border-destructive/20 bg-destructive/5">
@@ -40,7 +64,9 @@ export default async function ExpensesPage() {
               </div>
               <div>
                 <h3 className="text-3xl font-bold text-white mb-1">${(totalExpenses / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
-                <p className="text-sm text-muted-foreground font-medium">Total de Gastos Históricos</p>
+                <p className="text-sm text-muted-foreground font-medium">
+                  {filterMonth && filterYear ? `Total de Gastos (Mes Seleccionado)` : `Total de Gastos Históricos`}
+                </p>
               </div>
               <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-destructive to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
             </div>

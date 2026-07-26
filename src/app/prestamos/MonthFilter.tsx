@@ -8,7 +8,7 @@ const MONTHS = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
 
-export function MonthFilter() {
+export function MonthFilter({ basePath = "/prestamos" }: { basePath?: string }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -18,12 +18,12 @@ export function MonthFilter() {
   const handleFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value
     if (val === "ALL") {
-      router.push("/prestamos")
+      router.push(basePath)
       return
     }
     
     const [month, year] = val.split("-")
-    router.push(`/prestamos?month=${month}&year=${year}`)
+    router.push(`${basePath}?month=${month}&year=${year}`)
   }
   
   const now = new Date()
