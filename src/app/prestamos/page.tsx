@@ -119,7 +119,7 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
               </div>
             </div>
 
-            <PrestamosTableClient loans={filteredLoans} />
+            <PrestamosTableClient loans={filteredLoans} userRole={role} />
           </div>
         </main>
       </div>

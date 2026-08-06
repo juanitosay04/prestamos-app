@@ -9,7 +9,7 @@ import autoTable from "jspdf-autotable"
 
 type Loan = any
 
-export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
+export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userRole?: string }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -277,15 +277,17 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
               PDF Clientes
             </button>
 
-            <button 
-              onClick={() => handleAction("INTERNAL_REPORT")}
-              disabled={loading}
-              className="bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
-              title="Descarga informe administrativo con comisiones y rentabilidad"
-            >
-              <ShieldAlert className="h-4 w-4 text-purple-400" />
-              Liquidación Interna
-            </button>
+            {userRole === "ADMIN" && (
+              <button 
+                onClick={() => handleAction("INTERNAL_REPORT")}
+                disabled={loading}
+                className="bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                title="Descarga informe administrativo con comisiones y rentabilidad"
+              >
+                <ShieldAlert className="h-4 w-4 text-purple-400" />
+                Liquidación Interna
+              </button>
+            )}
 
             <button 
               onClick={() => handleAction("CLIENT_PAY")}
