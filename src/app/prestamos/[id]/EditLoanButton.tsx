@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import { Edit3, X, Calculator, Trash2, ShieldAlert } from "lucide-react"
 import { updateLoan } from "@/app/actions/loan"
 import { CurrencyInput } from "@/components/ui/CurrencyInput"
-import { toast } from "sonner"
+import toast from "react-hot-toast"
 
 type Investor = { id: string, name: string }
 
