@@ -125,7 +125,8 @@ export async function createLoan(data: any) {
       startDate,
       numberOfInstallments,
       investors, // Array of { investorId, participationPercentage, investedAmount }
-      referredByInvestorId
+      referredByInvestorId,
+      refinancedFromId
     } = data
 
     // Check if client is blacklisted
@@ -226,6 +227,7 @@ export async function createLoan(data: any) {
           installmentAmount: fixedInstallmentAmount,
           status: "ACTIVE",
           referredByInvestorId: referredByInvestorId || null,
+          refinancedFromId: refinancedFromId || null,
           // Relaciones
           installments: {
             create: installmentsData

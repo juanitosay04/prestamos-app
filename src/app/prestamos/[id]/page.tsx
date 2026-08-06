@@ -43,6 +43,21 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
   const progress = Math.round((totalPaid / totalExpected) * 100) || 0
 
   const outstandingPrincipal = loan.installments.filter(i => i.status === "PENDING").reduce((sum, curr) => sum + curr.principalPart, 0)
+  const outstandingLateFee = loan.installments.filter(i => i.status === "PENDING").reduce((sum, curr) => sum + (curr.lateFee || 0), 0)
+
+  const refinancedFromLoan = loan.refinancedFromId ? await prisma.loan.findUnique({
+    where: { id: loan.refinancedFromId },
+    select: { id: true, principalAmount: true, createdAt: true }
+  }) : null
+
+  const refinancedToLoan = await prisma.loan.findFirst({
+    where: { refinancedFromId: loan.id },
+    select: { id: true, principalAmount: true, createdAt: true, status: true }
+  })
+
+  const hasPayments = (await prisma.payment.count({
+    where: { loanId: loan.id, deletedAt: null }
+  })) > 0
 
   const principalPaymentsLog = await prisma.auditLog.findMany({
     where: {
@@ -88,6 +103,8 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                       currentInvestors={loan.investors}
                       currentPrincipal={loan.principalAmount}
                       totalExpected={totalExpected}
+                      outstandingPrincipal={outstandingPrincipal}
+                      outstandingLateFee={outstandingLateFee}
                     />
                     {role === "ADMIN" && <MarkDefaultedButton loanId={loan.id} />}
                   </div>
@@ -108,6 +125,51 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                 )}
               </div>
             </div>
+
+            {/* Banners de Trazabilidad de Refinanciación */}
+            {refinancedFromLoan && (
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold">
+                    🔄
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-300">Préstamo originado por refinanciación</p>
+                    <p className="text-xs text-muted-foreground">
+                      Refinanciado desde la obligación #{refinancedFromLoan.id.slice(-6).toUpperCase()} (${(refinancedFromLoan.principalAmount / 100).toLocaleString('es-CO')}) el {new Date(loan.startDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <Link 
+                  href={`/prestamos/${refinancedFromLoan.id}`}
+                  className="text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  Ver Préstamo Anterior →
+                </Link>
+              </div>
+            )}
+
+            {refinancedToLoan && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                    ⚠️
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-300">Obligación cerrada por refinanciación</p>
+                    <p className="text-xs text-muted-foreground">
+                      Esta deuda fue unificada y refinanciada en el nuevo préstamo #{refinancedToLoan.id.slice(-6).toUpperCase()} (${(refinancedToLoan.principalAmount / 100).toLocaleString('es-CO')})
+                    </p>
+                  </div>
+                </div>
+                <Link 
+                  href={`/prestamos/${refinancedToLoan.id}`}
+                  className="text-xs bg-amber-600 hover:bg-amber-500 text-white font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  Ir al Nuevo Préstamo →
+                </Link>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Información del Cliente y Préstamo */}

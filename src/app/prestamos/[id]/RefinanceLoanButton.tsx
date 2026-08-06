@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { createPortal } from "react-dom"
-import { RefreshCw, X, Calculator, Trash2 } from "lucide-react"
+import { RefreshCw, X, Calculator, Trash2, ArrowRight, Info } from "lucide-react"
 import { refinanceLoan } from "@/app/actions/loan"
 import { CurrencyInput } from "@/components/ui/CurrencyInput"
 
@@ -14,7 +14,9 @@ export function RefinanceLoanButton({
   availableInvestors,
   currentInvestors,
   currentPrincipal,
-  totalExpected
+  totalExpected,
+  outstandingPrincipal,
+  outstandingLateFee = 0
 }: { 
   oldLoanId: string
   clientId: string
@@ -22,13 +24,18 @@ export function RefinanceLoanButton({
   currentInvestors?: { investorId: string, participationPercentage: number }[]
   currentPrincipal: number
   totalExpected: number
+  outstandingPrincipal?: number
+  outstandingLateFee?: number
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  // Form State pre-filled with reasonable defaults
-  const [principalAmount, setPrincipalAmount] = useState((currentPrincipal / 100).toFixed(2))
+  const effectivePendingCapital = outstandingPrincipal !== undefined ? outstandingPrincipal : currentPrincipal
+  const initialPrincipalValue = ((effectivePendingCapital > 0 ? effectivePendingCapital : currentPrincipal) / 100).toString()
+
+  // Form State pre-filled with outstanding balance
+  const [principalAmount, setPrincipalAmount] = useState(initialPrincipalValue)
   const [interestType, setInterestType] = useState("MONTHLY")
   const [interestCalculation, setInterestCalculation] = useState("RATE")
   const [interestValue, setInterestValue] = useState("5")
@@ -36,7 +43,7 @@ export function RefinanceLoanButton({
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0])
   const [upfrontFee, setUpfrontFee] = useState("0")
   
-  const initialInvestors = currentInvestors 
+  const initialInvestors = currentInvestors && currentInvestors.length > 0
     ? currentInvestors.map(i => ({ investorId: i.investorId, percentage: i.participationPercentage.toString() }))
     : []
     
@@ -79,6 +86,11 @@ export function RefinanceLoanButton({
     const newArr = [...selectedInvestors]
     newArr[index] = { ...newArr[index], [field]: value }
     setSelectedInvestors(newArr)
+  }
+
+  const useExactPendingCapital = () => {
+    setPrincipalAmount((effectivePendingCapital / 100).toString())
+    setPreview(null)
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -132,7 +144,7 @@ export function RefinanceLoanButton({
       setError(result.error)
     } else {
       setIsOpen(false)
-      window.location.reload() // Reload page to show new status and redirect naturally
+      window.location.reload()
     }
     setLoading(false)
   }
@@ -166,9 +178,36 @@ export function RefinanceLoanButton({
                 </div>
               )}
 
-              <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-sm">
-                <p className="text-muted-foreground mb-1">Al refinanciar, este préstamo pasará a estado <strong>REFINANCED</strong> y se creará uno nuevo con las siguientes condiciones.</p>
-                <p className="text-muted-foreground">Te sugerimos usar como capital el saldo pendiente o el capital original.</p>
+              {/* Saldo insoluto y balance pendiente */}
+              <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Info className="h-4 w-4" /> Estado de la Deuda Actual
+                  </span>
+                  <button 
+                    type="button" 
+                    onClick={useExactPendingCapital}
+                    className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1 rounded font-medium transition-colors"
+                  >
+                    Usar Capital Insoluto
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block">Capital Pendiente:</span>
+                    <span className="font-bold text-white text-sm">${(effectivePendingCapital / 100).toLocaleString('es-CO')}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Capital Original:</span>
+                    <span className="font-bold text-white text-sm">${(currentPrincipal / 100).toLocaleString('es-CO')}</span>
+                  </div>
+                  {outstandingLateFee > 0 && (
+                    <div>
+                      <span className="text-destructive block">Mora Acumulada:</span>
+                      <span className="font-bold text-destructive text-sm">${(outstandingLateFee / 100).toLocaleString('es-CO')}</span>
+                    </div>
+                  )}
+                </div>
               </div>
               
               {/* Sección 1: Monto */}
@@ -270,80 +309,81 @@ export function RefinanceLoanButton({
               </div>
 
               {/* Simulador */}
-              <div className="flex flex-col gap-2">
+              <div className="border border-white/5 bg-white/5 p-4 rounded-xl flex flex-col gap-3">
                 <button 
                   type="button" 
                   onClick={handleCalculate}
-                  className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white p-2 rounded-lg text-sm font-medium transition-colors border border-white/10"
                 >
-                  <Calculator className="h-4 w-4" />
-                  Calcular Cuotas (Simulador)
+                  <Calculator className="h-4 w-4" /> Simular Cuota Estimada
                 </button>
+
                 {preview && (
-                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mt-2 flex justify-between items-center text-sm">
+                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-white/5">
                     <div>
-                      <span className="text-muted-foreground block">Interés Total:</span>
-                      <span className="text-white font-bold">${preview.totalInterest.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                      <p className="text-xs text-muted-foreground">Valor Cuota Fija Estimada</p>
+                      <p className="text-lg font-bold text-white">${preview.installmentAmount.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-blue-400 block font-medium">Cuota Esperada:</span>
-                      <span className="text-blue-400 text-xl font-bold">${preview.installmentAmount.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total Intereses</p>
+                      <p className="text-lg font-bold text-emerald-400">${preview.totalInterest.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Sección 4: Inversionistas */}
-              <div className="pt-4 border-t border-white/5">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-sm font-semibold text-white">Inversionistas Asignados</h3>
-                  <button 
-                    type="button" 
-                    onClick={addInvestor}
-                    className="text-xs bg-white/5 hover:bg-white/10 text-white px-3 py-1.5 rounded-full transition-colors border border-white/10"
-                  >
-                    + Añadir Inversionista
-                  </button>
+              {/* Inversionistas / Fondeo Heredado */}
+              <div className="border-t border-white/5 pt-4">
+                <div className="flex justify-between items-center mb-2">
+                  <div>
+                    <label className="text-sm font-medium text-white block">Participación de Inversionistas</label>
+                    <span className="text-xs text-muted-foreground">Se heredan automáticamente los inversionistas de la obligación original.</span>
+                  </div>
+                  {availableInvestors.length > 0 && currentTotalPercentage < 100 && (
+                    <button 
+                      type="button" 
+                      onClick={addInvestor}
+                      className="text-xs bg-white/5 hover:bg-white/10 text-white border border-white/10 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      + Añadir Inversionista
+                    </button>
+                  )}
                 </div>
-                
-                {selectedInvestors.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">Fondeo Propio de JyJ.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedInvestors.map((inv, idx) => (
-                      <div key={idx} className="flex items-center gap-3">
-                        <select 
-                          value={inv.investorId}
-                          onChange={e => updateInvestor(idx, "investorId", e.target.value)}
-                          className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                        >
-                          {availableInvestors.map(i => <option key={i.id} value={i.id} className="bg-background">{i.name}</option>)}
-                        </select>
-                        <div className="flex items-center gap-1 w-32">
-                          <input 
-                            type="number" 
-                            step="0.01" 
-                            value={inv.percentage}
-                            onChange={e => updateInvestor(idx, "percentage", e.target.value)}
-                            placeholder="%"
-                            className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                          />
-                          <span className="text-muted-foreground">%</span>
-                        </div>
-                        <button type="button" onClick={() => removeInvestor(idx)} className="p-2 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <div className={`text-xs font-bold text-right pt-2 ${currentTotalPercentage > 100 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                      Total Asignado: {currentTotalPercentage}% / 100%
+
+                {selectedInvestors.map((inv, idx) => (
+                  <div key={idx} className="flex gap-2 items-center mb-2">
+                    <select
+                      value={inv.investorId}
+                      onChange={e => updateInvestor(idx, "investorId", e.target.value)}
+                      className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                    >
+                      {availableInvestors.map(ai => (
+                        <option key={ai.id} value={ai.id} className="bg-background">{ai.name}</option>
+                      ))}
+                    </select>
+                    <div className="w-24 flex items-center">
+                      <input 
+                        type="number" 
+                        value={inv.percentage} 
+                        onChange={e => updateInvestor(idx, "percentage", e.target.value)}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-2 text-sm text-white"
+                        placeholder="%"
+                      />
+                      <span className="text-xs text-muted-foreground ml-1">%</span>
                     </div>
+                    <button type="button" onClick={() => removeInvestor(idx)} className="p-2 text-muted-foreground hover:text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                )}
+                ))}
+                
+                <div className="flex justify-between items-center text-xs text-muted-foreground mt-2">
+                  <span>Fondeo Propio JyJ: {Math.max(0, 100 - currentTotalPercentage)}%</span>
+                  <span>Total Inversionistas: {currentTotalPercentage}%</span>
+                </div>
               </div>
 
-              {/* Acciones Finales */}
-              <div className="mt-4 flex justify-end gap-3 pt-4 border-t border-white/5">
+              <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
                 <button 
                   type="button" 
                   onClick={() => setIsOpen(false)}
@@ -353,11 +393,10 @@ export function RefinanceLoanButton({
                 </button>
                 <button 
                   type="submit" 
-                  disabled={loading || !preview}
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-                  title={!preview ? "Debe calcular las cuotas primero" : ""}
+                  disabled={loading}
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  {loading ? "Refinanciando..." : "Confirmar Refinanciación"}
+                  {loading ? "Procesando..." : "Confirmar Refinanciación"}
                 </button>
               </div>
             </form>
