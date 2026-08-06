@@ -480,3 +480,173 @@ export async function registerPrincipalPayment(
     return { error: error.message || "Error procesando el abono a capital" }
   }
 }
+
+export async function updateLoan(loanId: string, data: any) {
+  try {
+    const session = await getSession()
+    if (!session || session.role !== "ADMIN") {
+      return { error: "Solo los administradores pueden editar préstamos." }
+    }
+
+    // Validar que no tenga pagos
+    const paymentsCount = await prisma.payment.count({
+      where: { loanId, deletedAt: null }
+    })
+    if (paymentsCount > 0) {
+      return { error: "No se puede editar un préstamo que ya cuenta con pagos registrados. Utilice la opción de Refinanciar o Abono a Capital." }
+    }
+
+    const {
+      principalAmount,
+      interestRate,
+      interestAmount,
+      interestType,
+      secretaryCommission,
+      secretaryCommissionType,
+      upfrontFee,
+      startDate,
+      numberOfInstallments,
+      investors,
+      referredByInvestorId
+    } = data
+
+    // Calcular amortización
+    const installmentsData: any[] = []
+    let currentDate = new Date(startDate)
+    
+    let isFrench = false
+    let fixedInstallmentAmount = 0
+    let totalInterestInCents = 0
+    let iRate = (interestRate || 0) / 100
+
+    if (interestAmount && interestAmount > 0) {
+      totalInterestInCents = interestAmount
+      const pPart = Math.round(principalAmount / numberOfInstallments)
+      const iPart = Math.round(totalInterestInCents / numberOfInstallments)
+      fixedInstallmentAmount = pPart + iPart
+    } else if (numberOfInstallments === 1) {
+      totalInterestInCents = Math.round(principalAmount * iRate)
+      fixedInstallmentAmount = principalAmount + totalInterestInCents
+    } else {
+      isFrench = true
+      if (iRate > 0) {
+        fixedInstallmentAmount = Math.round(principalAmount * (iRate / (1 - Math.pow(1 + iRate, -numberOfInstallments))))
+      } else {
+        fixedInstallmentAmount = Math.round(principalAmount / numberOfInstallments)
+      }
+    }
+
+    let outstandingPrincipal = principalAmount
+
+    for (let i = 1; i <= numberOfInstallments; i++) {
+      if (interestType === "MONTHLY") {
+        currentDate = addMonths(currentDate, 1)
+      } else if (interestType === "WEEKLY") {
+        currentDate = addWeeks(currentDate, 1)
+      } else if (interestType === "BIWEEKLY") {
+        currentDate = addWeeks(currentDate, 2)
+      } else if (interestType === "DAILY") {
+        currentDate = addDays(currentDate, 1)
+      }
+      
+      let interestPart = 0
+      let principalPart = 0
+
+      if (interestAmount && interestAmount > 0) {
+        interestPart = Math.round(totalInterestInCents / numberOfInstallments)
+        principalPart = Math.round(principalAmount / numberOfInstallments)
+      } else if (numberOfInstallments === 1) {
+        interestPart = totalInterestInCents
+        principalPart = principalAmount
+      } else if (isFrench) {
+        interestPart = Math.round(outstandingPrincipal * iRate)
+        principalPart = fixedInstallmentAmount - interestPart
+        
+        if (i === numberOfInstallments) {
+          principalPart = outstandingPrincipal
+          fixedInstallmentAmount = principalPart + interestPart
+        }
+        outstandingPrincipal -= principalPart
+      }
+
+      installmentsData.push({
+        loanId,
+        installmentNumber: i,
+        dueDate: new Date(currentDate),
+        expectedAmount: fixedInstallmentAmount,
+        principalPart: principalPart,
+        interestPart: interestPart,
+        status: "PENDING",
+        amountPaid: 0,
+        lateFee: 0
+      })
+    }
+
+    const endDate = installmentsData[installmentsData.length - 1].dueDate
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Eliminar cuotas anteriores
+      await tx.installment.deleteMany({
+        where: { loanId }
+      })
+
+      // 2. Eliminar asignaciones de inversionistas previas
+      await tx.investorLoan.deleteMany({
+        where: { loanId }
+      })
+
+      // 3. Crear nuevas cuotas
+      await tx.installment.createMany({
+        data: installmentsData
+      })
+
+      // 4. Crear nuevas relaciones de inversionistas
+      if (investors && investors.length > 0) {
+        await tx.investorLoan.createMany({
+          data: investors.map((inv: any) => ({
+            loanId,
+            investorId: inv.investorId,
+            investedAmount: inv.investedAmount,
+            participationPercentage: inv.participationPercentage
+          }))
+        })
+      }
+
+      // 5. Actualizar préstamo
+      await tx.loan.update({
+        where: { id: loanId },
+        data: {
+          principalAmount,
+          interestRate: interestRate || 0,
+          interestType: interestType as any,
+          interestAmount: interestAmount || null,
+          secretaryCommission: secretaryCommission || 0,
+          secretaryCommissionType: secretaryCommissionType as any,
+          upfrontFee: upfrontFee || 0,
+          startDate: new Date(startDate),
+          endDate,
+          numberOfInstallments,
+          installmentAmount: fixedInstallmentAmount,
+          referredByInvestorId: referredByInvestorId || null
+        }
+      })
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.userId,
+        action: "UPDATE_LOAN",
+        entityType: "Loan",
+        entityId: loanId,
+        details: JSON.stringify({ principal: principalAmount, installments: numberOfInstallments })
+      }
+    })
+
+    revalidatePath(`/prestamos/${loanId}`)
+    revalidatePath("/prestamos")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error updating loan:", error)
+    return { error: error.message || "Error al actualizar el préstamo" }
+  }
+}

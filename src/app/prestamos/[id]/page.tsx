@@ -7,6 +7,7 @@ import { PayInstallmentButton } from "./PayInstallmentButton"
 import { InstallmentBreakdown } from "./InstallmentBreakdown"
 import { WhatsAppReminderButton } from "./WhatsAppReminderButton"
 import { RefinanceLoanButton } from "./RefinanceLoanButton"
+import { EditLoanButton } from "./EditLoanButton"
 import { PrintClearanceButton } from "./PrintClearanceButton"
 import { PrincipalPaymentButton } from "./PrincipalPaymentButton"
 import { MarkDefaultedButton, ReviveLoanButton } from "./DefaultLoanButtons"
@@ -95,6 +96,25 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
               <div className="ml-auto">
                 {loan.status === "ACTIVE" || loan.status === "OVERDUE" ? (
                   <div className="flex items-center gap-2">
+                    {role === "ADMIN" && !hasPayments && (
+                      <EditLoanButton 
+                        loan={{
+                          id: loan.id,
+                          principalAmount: loan.principalAmount,
+                          interestRate: loan.interestRate,
+                          interestAmount: loan.interestAmount,
+                          interestType: loan.interestType,
+                          upfrontFee: loan.upfrontFee,
+                          secretaryCommission: loan.secretaryCommission,
+                          secretaryCommissionType: loan.secretaryCommissionType,
+                          startDate: loan.startDate,
+                          numberOfInstallments: loan.numberOfInstallments,
+                          investors: loan.investors,
+                          referredByInvestorId: loan.referredByInvestorId
+                        }}
+                        availableInvestors={allInvestors}
+                      />
+                    )}
                     <PrincipalPaymentButton loanId={loan.id} outstandingPrincipal={outstandingPrincipal} />
                     <RefinanceLoanButton 
                       oldLoanId={loan.id}
