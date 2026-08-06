@@ -105,14 +105,14 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
         
         <Header />
         
-        <main className="flex-1 overflow-y-auto p-8 relative z-0">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 relative z-0">
           <div className="max-w-6xl mx-auto space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Préstamos Activos</h1>
-                <p className="text-muted-foreground">Administra el dinero en circulación y cronogramas de pago.</p>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-1">Préstamos Activos</h1>
+                <p className="text-xs md:text-sm text-muted-foreground">Administra el dinero en circulación y cronogramas de pago.</p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                 <StatusFilter currentStatus={status} />
                 <MonthFilter />
                 <NewLoanButton clients={mappedClients} investors={mappedInvestors} userRole={role} />

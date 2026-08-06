@@ -77,25 +77,27 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
         
         <Header />
         
-        <main className="flex-1 overflow-y-auto p-8 relative z-0">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 relative z-0">
           <div className="max-w-4xl mx-auto space-y-6">
             
-            <div className="flex items-center gap-4">
-              <Link href="/prestamos" className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white transition-colors">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                  Detalle del Préstamo 
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${loan.status === 'PAID' ? 'bg-emerald-500/20 text-emerald-400' : loan.status === 'REFINANCED' ? 'bg-blue-500/20 text-blue-400' : 'bg-primary/20 text-primary'}`}>
-                    {loan.status}
-                  </span>
-                </h1>
-                <p className="text-sm text-muted-foreground font-mono mt-1">ID: {loan.id}</p>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex items-center gap-3">
+                <Link href="/prestamos" className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white transition-colors">
+                  <ArrowLeft className="h-5 w-5" />
+                </Link>
+                <div>
+                  <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                    Detalle del Préstamo 
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${loan.status === 'PAID' ? 'bg-emerald-500/20 text-emerald-400' : loan.status === 'REFINANCED' ? 'bg-blue-500/20 text-blue-400' : 'bg-primary/20 text-primary'}`}>
+                      {loan.status}
+                    </span>
+                  </h1>
+                  <p className="text-xs md:text-sm text-muted-foreground font-mono mt-0.5">ID: {loan.id}</p>
+                </div>
               </div>
-              <div className="ml-auto">
+              <div className="w-full md:w-auto flex flex-wrap items-center gap-2">
                 {loan.status === "ACTIVE" || loan.status === "OVERDUE" ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     {role === "ADMIN" && !hasPayments && (
                       <EditLoanButton 
                         loan={{
