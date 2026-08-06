@@ -302,6 +302,7 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                                   clientName={`${loan.client.firstName} ${loan.client.lastName}`}
                                   idDocument={loan.client.idDocument}
                                   installmentNumber={inst.installmentNumber}
+                                  totalInstallments={loan.numberOfInstallments}
                                   defaultedAt={loan.defaultedAt}
                                 />
                               )}

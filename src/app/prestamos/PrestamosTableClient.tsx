@@ -1,13 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { Briefcase, Calendar, CheckCircle2, AlertCircle, Printer, Loader2, FileDown, Check } from "lucide-react"
+import { Briefcase, Calendar, FileDown, Printer, Loader2, Check, ShieldAlert } from "lucide-react"
 import Link from "next/link"
 import { processBatchInstallments, getBatchInstallmentsInfo } from "@/app/actions/payment"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
-type Loan = any // Using any for simplicity here to map the enriched loan
+type Loan = any
+
 export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -20,15 +21,28 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
     }
   }
 
-  const handleProcessBatch = async (onlyPdf: boolean) => {
-    if (!onlyPdf) {
-      if (!confirm(`¿Estás seguro de que deseas procesar el cobro de la cuota actual para los ${selectedIds.length} préstamos seleccionados?`)) {
+  const selectAllSelectable = () => {
+    const selectable = loans
+      .filter(l => l.status !== "DEFAULTED" && l.status !== "PAID")
+      .map(l => l.id)
+    if (selectedIds.length === selectable.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(selectable)
+    }
+  }
+
+  // mode: "CLIENT_PDF" (only preview/pdf for clients), "CLIENT_PAY" (pay and download client receipt), "INTERNAL_REPORT" (admin breakdown)
+  const handleAction = async (mode: "CLIENT_PDF" | "CLIENT_PAY" | "INTERNAL_REPORT") => {
+    if (mode === "CLIENT_PAY") {
+      if (!confirm(`¿Estás seguro de procesar el cobro de la cuota actual para los ${selectedIds.length} préstamos seleccionados?`)) {
         return
       }
     }
 
     setLoading(true)
-    const res = onlyPdf ? await getBatchInstallmentsInfo(selectedIds) : await processBatchInstallments(selectedIds)
+    const isPayment = mode === "CLIENT_PAY"
+    const res = isPayment ? await processBatchInstallments(selectedIds) : await getBatchInstallmentsInfo(selectedIds)
     setLoading(false)
 
     if (res.error) {
@@ -39,10 +53,15 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
     if (res.results) {
       const successfulPayments = res.results.filter((r: any) => r.success)
       if (successfulPayments.length > 0) {
-        generatePDF(successfulPayments, onlyPdf)
-        if (!onlyPdf) {
+        if (mode === "INTERNAL_REPORT") {
+          generateInternalSettlementPDF(successfulPayments)
+        } else {
+          generateClientReceiptsPDF(successfulPayments, mode === "CLIENT_PDF")
+        }
+
+        if (isPayment) {
           setSelectedIds([])
-          alert(`Se han cobrado ${successfulPayments.length} cuotas exitosamente y se descargó el recibo.`)
+          alert(`Se han cobrado ${successfulPayments.length} cuotas exitosamente y se generó el comprobante.`)
           window.location.reload()
         }
       } else {
@@ -51,41 +70,117 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
     }
   }
 
-  const generatePDF = (payments: any[], isProforma: boolean) => {
+  // 1. Recibo 100% LIMPIO PARA CLIENTES (Sin datos de inversores ni comisiones de la empresa)
+  const generateClientReceiptsPDF = (payments: any[], isProforma: boolean) => {
     const doc = new jsPDF()
 
-    // Title
+    doc.setFont("helvetica", "bold")
     doc.setFontSize(18)
-    doc.text(isProforma ? "Desglose de Cuotas Pendientes" : "Recibo Consolidado de Pagos", 14, 22)
-    doc.setFontSize(11)
-    doc.text(`Fecha de Emisión: ${new Date().toLocaleString('es-CO')}`, 14, 30)
+    doc.setTextColor(30, 41, 59)
+    doc.text("JyJ Préstamos - Comprobante de Recaudo", 14, 20)
+    
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.setTextColor(100, 116, 139)
+    doc.text(`Fecha de Emisión: ${new Date().toLocaleString('es-CO')}`, 14, 27)
+    doc.text(isProforma ? "Estado: Pre-liquidación / Cobro Pendiente" : "Estado: Pago Registrado y Aprobado", 14, 33)
 
-    let currentY = 40
-
-    let totalAmountCollected = 0
-    let totalPrincipal = 0
-    let totalInterest = 0
+    let currentY = 42
+    let grandTotal = 0
 
     for (let i = 0; i < payments.length; i++) {
       const p = payments[i]
-      totalAmountCollected += p.amountPaid
-      totalPrincipal += p.principalPart
-      totalInterest += p.interestPart + p.lateFee
+      grandTotal += p.amountPaid
 
-      // Check if we need a new page
-      if (currentY > 250) {
+      if (currentY > 240) {
         doc.addPage()
         currentY = 20
       }
 
-      // Title for the Loan
+      // Encabezado del cliente
       doc.setFontSize(12)
       doc.setFont("helvetica", "bold")
-      doc.setTextColor(41, 128, 185)
-      doc.text(`Cliente: ${p.clientName} | Préstamo: ${p.loanId.slice(0,8)} | Cuota: #${p.installmentNumber}`, 14, currentY)
-      currentY += 6
+      doc.setTextColor(15, 23, 42)
+      doc.text(`${i + 1}. Cliente: ${p.clientName}`, 14, currentY)
+      
+      doc.setFontSize(9)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(100, 116, 139)
+      doc.text(`Documento: ${p.idDocument} | Préstamo: #${p.loanId.slice(-6).toUpperCase()} | Cuota #${p.installmentNumber}`, 14, currentY + 5)
+      currentY += 9
 
-      // Math calculations
+      const baseCuota = p.principalPart + p.interestPart
+      const mora = p.lateFee || 0
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Concepto', 'Abono Cuota', 'Recargo Mora', 'Total Abonado']],
+        body: [[
+          `Cuota #${p.installmentNumber} de ${p.numberOfInstallments}`,
+          `$${(baseCuota / 100).toLocaleString('es-CO')}`,
+          mora > 0 ? `$${(mora / 100).toLocaleString('es-CO')}` : '$0',
+          `$${(p.amountPaid / 100).toLocaleString('es-CO')}`
+        ]],
+        theme: 'striped',
+        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
+        styles: { fontSize: 9 }
+      })
+
+      currentY = (doc as any).lastAutoTable.finalY + 10
+    }
+
+    if (currentY > 260) {
+      doc.addPage()
+      currentY = 20
+    }
+
+    doc.setFillColor(30, 41, 59)
+    doc.rect(14, currentY, 182, 10, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(11)
+    doc.text(`TOTAL RECAUDADO: $${(grandTotal / 100).toLocaleString('es-CO')}`, 20, currentY + 7)
+
+    doc.save(`Recibos_Clientes_${new Date().getTime()}.pdf`)
+  }
+
+  // 2. Reporte EXCLUSIVO DE AUDITORÍA Y LIQUIDACIÓN INTERNA (Solo para Administración)
+  const generateInternalSettlementPDF = (payments: any[]) => {
+    const doc = new jsPDF()
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(16)
+    doc.setTextColor(142, 68, 173)
+    doc.text("INFORME INTERNO DE LIQUIDACIÓN Y REPARTICIÓN (JyJ)", 14, 20)
+    
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(100, 116, 139)
+    doc.text(`Fecha: ${new Date().toLocaleString('es-CO')} | Documento de uso exclusivo de administración`, 14, 26)
+
+    let currentY = 34
+    let totalCollected = 0
+    let totalCapital = 0
+    let totalInterest = 0
+    let totalJyJProfit = 0
+
+    for (let i = 0; i < payments.length; i++) {
+      const p = payments[i]
+      totalCollected += p.amountPaid
+      totalCapital += p.principalPart
+      totalInterest += p.interestPart + p.lateFee
+
+      if (currentY > 230) {
+        doc.addPage()
+        currentY = 20
+      }
+
+      doc.setFontSize(11)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(15, 23, 42)
+      doc.text(`Préstamo #${p.loanId.slice(0, 8)} - ${p.clientName} (Cuota ${p.installmentNumber})`, 14, currentY)
+      currentY += 5
+
       const tInt = p.interestPart + p.lateFee
       let secComm = 0
       if (p.secretaryCommissionType === "FIXED_AMOUNT") {
@@ -99,32 +194,15 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
       const referralComm = p.referredByInvestor ? Math.round(tInt * 0.03) : 0
       const remainingInterest = Math.max(0, tInt - secComm - jyjComm - referralComm)
 
-      // Summary Table
-      autoTable(doc, {
-        startY: currentY,
-        head: [['Total a Pagar', 'Abono a Capital', 'Interés Cobrado', 'Mora']],
-        body: [[
-          `$${(p.amountPaid / 100).toLocaleString('es-CO')}`,
-          `$${(p.principalPart / 100).toLocaleString('es-CO')}`,
-          `$${(p.interestPart / 100).toLocaleString('es-CO')}`,
-          `$${(p.lateFee / 100).toLocaleString('es-CO')}`
-        ]],
-        theme: 'grid',
-        headStyles: { fillColor: [44, 62, 80] },
-        styles: { fontSize: 9 }
-      })
-      currentY = (doc as any).lastAutoTable.finalY + 5
-
-      // Comisiones y Retornos
       const breakdownData: any[][] = []
       
       if (secComm > 0) {
-        breakdownData.push(['Comisión Secretaria', 'Gestión y Cobro', `$${(secComm / 100).toLocaleString('es-CO')}`])
+        breakdownData.push(['Comisión Secretaria', 'Gestión de Cobro', `$${(secComm / 100).toLocaleString('es-CO')}`])
       }
-      breakdownData.push(['Comisión Plataforma JyJ', '20% de Rentabilidad', `$${(jyjComm / 100).toLocaleString('es-CO')}`])
+      breakdownData.push(['Comisión Plataforma JyJ', '20% Fijo Rentabilidad', `$${(jyjComm / 100).toLocaleString('es-CO')}`])
 
       if (p.referredByInvestor) {
-        breakdownData.push(['Comisión por Referido', `3% - Inversor: ${p.referredByInvestor.name}`, `$${(referralComm / 100).toLocaleString('es-CO')}`])
+        breakdownData.push(['Comisión Referido (3%)', `Inversor: ${p.referredByInvestor.name}`, `$${(referralComm / 100).toLocaleString('es-CO')}`])
       }
 
       let totalInvPct = 0
@@ -133,7 +211,7 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
           totalInvPct += inv.participationPercentage
           const cap = Math.round(p.principalPart * (inv.participationPercentage / 100))
           const int = Math.round(remainingInterest * (inv.participationPercentage / 100))
-          breakdownData.push([`Inversionista: ${inv.investor.name}`, `Capital: $${(cap/100).toLocaleString('es-CO')} | Ganancia: $${(int/100).toLocaleString('es-CO')}`, `$${((cap+int)/100).toLocaleString('es-CO')}`])
+          breakdownData.push([`Inversor: ${inv.investor.name} (${inv.participationPercentage}%)`, `Capital: $${(cap/100).toLocaleString('es-CO')} | Utilidad: $${(int/100).toLocaleString('es-CO')}`, `$${((cap+int)/100).toLocaleString('es-CO')}`])
         })
       }
 
@@ -141,64 +219,81 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
       if (jyjFundingPct > 0) {
         const cap = Math.round(p.principalPart * (jyjFundingPct / 100))
         const int = Math.round(remainingInterest * (jyjFundingPct / 100))
-        breakdownData.push([`Fondeo Propio JyJ (${jyjFundingPct}%)`, `Capital: $${(cap/100).toLocaleString('es-CO')} | Ganancia: $${(int/100).toLocaleString('es-CO')}`, `$${((cap+int)/100).toLocaleString('es-CO')}`])
+        totalJyJProfit += jyjComm + int
+        breakdownData.push([`Fondeo JyJ Propio (${jyjFundingPct}%)`, `Capital: $${(cap/100).toLocaleString('es-CO')} | Utilidad: $${(int/100).toLocaleString('es-CO')}`, `$${((cap+int)/100).toLocaleString('es-CO')}`])
+      } else {
+        totalJyJProfit += jyjComm
       }
 
       autoTable(doc, {
         startY: currentY,
-        head: [['Concepto', 'Detalle', 'Monto']],
+        head: [['Distribución', 'Detalle', 'Valor']],
         body: breakdownData,
         theme: 'grid',
-        headStyles: { fillColor: [142, 68, 173] }, // Purple for breakdown
-        styles: { fontSize: 9 }
+        headStyles: { fillColor: [142, 68, 173] },
+        styles: { fontSize: 8 }
       })
-      currentY = (doc as any).lastAutoTable.finalY + 15
+      currentY = (doc as any).lastAutoTable.finalY + 10
     }
 
-    // Gran Total
-    if (currentY > 270) {
+    if (currentY > 260) {
       doc.addPage()
       currentY = 20
     }
-    
-    doc.setFillColor(41, 128, 185)
+
+    doc.setFillColor(142, 68, 173)
     doc.rect(14, currentY, 182, 10, 'F')
     doc.setTextColor(255, 255, 255)
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(12)
-    doc.text(`GRAN TOTAL ${isProforma ? 'A COBRAR' : 'PAGADO'}: $${(totalAmountCollected / 100).toLocaleString('es-CO')}`, 20, currentY + 7)
+    doc.setFontSize(10)
+    doc.text(`TOTAL RECAUDO: $${(totalCollected / 100).toLocaleString('es-CO')} | GANANCIA TOTAL JYJ: $${(totalJyJProfit / 100).toLocaleString('es-CO')}`, 20, currentY + 7)
 
-    doc.save(`Recibo_Detallado_${new Date().getTime()}.pdf`)
+    doc.save(`Informe_Liquidacion_Interna_${new Date().getTime()}.pdf`)
   }
 
   return (
     <div className="relative">
       {/* Floating Action Bar */}
       {selectedIds.length > 0 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-card border border-white/10 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 animate-in slide-in-from-bottom-10 fade-in duration-300">
-          <div className="flex flex-col">
-            <span className="text-white font-bold text-lg">{selectedIds.length} seleccionados</span>
-            <span className="text-xs text-muted-foreground">Listos para procesar</span>
-          </div>
-          <div className="w-px h-10 bg-white/10"></div>
-          
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-2xl px-6 py-4 flex flex-wrap items-center justify-between gap-4 max-w-4xl w-[92%] animate-in slide-in-from-bottom-10 fade-in duration-300">
           <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold">
+              {selectedIds.length}
+            </div>
+            <div>
+              <span className="text-white font-bold text-sm block">Préstamos Seleccionados</span>
+              <span className="text-xs text-muted-foreground">Listos para procesar</span>
+            </div>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
             <button 
-              onClick={() => handleProcessBatch(true)}
+              onClick={() => handleAction("CLIENT_PDF")}
               disabled={loading}
-              className="bg-white/10 hover:bg-white/20 text-white px-5 py-3 rounded-xl font-bold transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              title="Descarga comprobante sin aplicar cobro en el sistema"
             >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
-              {loading ? "Generando..." : "Solo Generar PDF"}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              PDF Clientes
             </button>
 
             <button 
-              onClick={() => handleProcessBatch(false)}
+              onClick={() => handleAction("INTERNAL_REPORT")}
               disabled={loading}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-3 rounded-xl font-bold transition-colors flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50"
+              className="bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              title="Descarga informe administrativo con comisiones y rentabilidad"
             >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Printer className="h-5 w-5" />}
-              {loading ? "Procesando..." : "Cobrar y Generar PDF"}
+              <ShieldAlert className="h-4 w-4 text-purple-400" />
+              Liquidación Interna
+            </button>
+
+            <button 
+              onClick={() => handleAction("CLIENT_PAY")}
+              disabled={loading}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+              Cobrar y Recibo
             </button>
           </div>
         </div>
@@ -209,7 +304,15 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
           <table className="w-full text-sm text-left">
             <thead className="bg-white/5 text-muted-foreground border-b border-white/5 uppercase text-xs font-semibold">
               <tr>
-                <th className="px-6 py-4 w-12"></th>
+                <th className="px-6 py-4 w-12">
+                  <button 
+                    onClick={selectAllSelectable}
+                    className="text-xs text-muted-foreground hover:text-white underline font-normal"
+                    title="Seleccionar todos los activos"
+                  >
+                    Todos
+                  </button>
+                </th>
                 <th className="px-6 py-4">Cliente / ID Préstamo</th>
                 <th className="px-6 py-4">Capital Original</th>
                 <th className="px-6 py-4">Cuotas (Monto)</th>
@@ -228,7 +331,6 @@ export function PrestamosTableClient({ loans }: { loans: Loan[] }) {
               ) : (
                 loans.map((loan) => {
                   const isSelected = selectedIds.includes(loan.id)
-                  // Prevent selecting DEFAULTED or PAID loans as they don't have pending installments
                   const isSelectable = loan.status !== "DEFAULTED" && loan.status !== "PAID"
                   
                   return (

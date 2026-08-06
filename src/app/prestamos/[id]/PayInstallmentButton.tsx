@@ -19,6 +19,7 @@ export function PayInstallmentButton({
   clientName,
   idDocument,
   installmentNumber,
+  totalInstallments,
   defaultedAt
 }: { 
   installmentId: string
@@ -30,6 +31,7 @@ export function PayInstallmentButton({
   clientName: string
   idDocument: string
   installmentNumber: number
+  totalInstallments?: number
   defaultedAt?: Date | null
 }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -91,6 +93,7 @@ export function PayInstallmentButton({
         clientName,
         idDocument,
         installmentNumber,
+        totalInstallments,
         amountPaid: amountInCents + moraInCents,
         paymentDate: new Date(),
         moraPaid: moraInCents
