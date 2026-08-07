@@ -71,138 +71,364 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
   const generateClientReceiptsPDF = (payments: any[], isProforma: boolean) => {
     const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+
+    // Encabezado Corporativo
+    doc.setFillColor(15, 23, 42) // Slate 900
+    doc.rect(0, 0, pageWidth, 28, 'F')
+
+    // Barra de acento
+    doc.setFillColor(37, 99, 235) // Blue 600
+    doc.rect(0, 28, pageWidth, 2, 'F')
 
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(18)
-    doc.setTextColor(30, 41, 59)
-    doc.text("JyJ Préstamos - Comprobante de Recaudo", 14, 20)
-    
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
-    doc.setTextColor(100, 116, 139)
-    doc.text(`Fecha de Emisión: ${new Date().toLocaleString('es-CO')}`, 14, 27)
-    doc.text(isProforma ? "Estado: Pre-liquidación / Cobro Pendiente" : "Estado: Pago Registrado y Aprobado", 14, 33)
+    doc.setFontSize(14)
+    doc.setTextColor(255, 255, 255)
+    doc.text("JYJ PRÉSTAMOS", 14, 12)
 
-    let currentY = 42
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(148, 163, 184)
+    doc.text(isProforma ? "HOJA DE RUTA / PRE-LIQUIDACIÓN DE RECAUDO" : "COMPROBANTE OFICIAL DE RECAUDO EN LOTE", 14, 18)
+    doc.text("NIT / ID: 901.458.239-1 • Soluciones Financieras", 14, 23)
+
+    // Metadatos a la derecha
+    doc.setFontSize(8)
+    doc.setTextColor(255, 255, 255)
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`, pageWidth - 14, 12, { align: "right" })
+    doc.setTextColor(isProforma ? 251 : 52, isProforma ? 191 : 211, isProforma ? 36 : 153) // Amber or Emerald
+    doc.text(isProforma ? "ESTADO: PRE-LIQUIDACIÓN" : "ESTADO: APROBADO Y REGISTRADO", pageWidth - 14, 18, { align: "right" })
+
+    // Cálculos de Resumen
     let grandTotal = 0
+    let grandPrincipal = 0
+    let grandInterest = 0
+    let grandLate = 0
 
-    for (let i = 0; i < payments.length; i++) {
-      const p = payments[i]
-      grandTotal += p.amountPaid
+    payments.forEach(p => {
+      grandTotal += p.amountPaid || 0
+      grandPrincipal += p.principalPart || 0
+      grandInterest += p.interestPart || 0
+      grandLate += p.lateFee || 0
+    })
 
-      if (currentY > 240) {
-        doc.addPage()
-        currentY = 20
-      }
+    // Resumen Ejecutivo Cards
+    doc.setFillColor(248, 250, 252) // Slate 50
+    doc.roundedRect(14, 34, pageWidth - 28, 20, 2, 2, 'F')
+    doc.setDrawColor(226, 232, 240)
+    doc.roundedRect(14, 34, pageWidth - 28, 20, 2, 2, 'S')
 
-      doc.setFontSize(12)
-      doc.setFont("helvetica", "bold")
-      doc.setTextColor(15, 23, 42)
-      doc.text(`${i + 1}. Cliente: ${p.clientName}`, 14, currentY)
-      
-      doc.setFontSize(9)
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(100, 116, 139)
-      doc.text(`Documento: ${p.idDocument} | Préstamo: #${p.loanId.slice(-6).toUpperCase()} | Cuota #${p.installmentNumber}`, 14, currentY + 5)
-      currentY += 9
-
-      const baseCuota = p.principalPart + p.interestPart
-      const mora = p.lateFee || 0
-
-      autoTable(doc, {
-        startY: currentY,
-        head: [['Concepto', 'Abono Cuota', 'Recargo Mora', 'Total Abonado']],
-        body: [[
-          `Cuota #${p.installmentNumber} de ${p.numberOfInstallments}`,
-          `$${(baseCuota / 100).toLocaleString('es-CO')}`,
-          `$${(mora / 100).toLocaleString('es-CO')}`,
-          `$${(p.amountPaid / 100).toLocaleString('es-CO')}`
-        ]],
-        theme: 'striped',
-        headStyles: { fillColor: [59, 130, 246] },
-        styles: { fontSize: 9 }
-      })
-
-      currentY = (doc as any).lastAutoTable.finalY + 12
-    }
-
-    if (currentY > 260) {
-      doc.addPage()
-      currentY = 20
-    }
-
-    doc.setFillColor(241, 245, 249)
-    doc.rect(14, currentY, 182, 10, 'F')
-    doc.setTextColor(15, 23, 42)
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(11)
-    doc.text(`TOTAL RECAUDADO: $${(grandTotal / 100).toLocaleString('es-CO')}`, 20, currentY + 7)
-
-    doc.save(`${isProforma ? 'Pre_Liquidacion' : 'Recibo_Clientes'}_${new Date().getTime()}.pdf`)
-  }
-
-  const generateInternalSettlementPDF = (payments: any[]) => {
-    const doc = new jsPDF()
-
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(16)
-    doc.setTextColor(24, 43, 73)
-    doc.text("JyJ Préstamos - Informe Interno de Liquidación", 14, 20)
+    // 4 Columnas en la tarjeta de resumen
+    const colW = (pageWidth - 28) / 4
     
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(9)
+    // Col 1: Total Clientes
+    doc.setFontSize(7)
+    doc.setFont("helvetica", "bold")
     doc.setTextColor(100, 116, 139)
-    doc.text(`Generado: ${new Date().toLocaleString('es-CO')} | Confidencial - Uso Administrativo`, 14, 26)
+    doc.text("CLIENTES / CUOTAS", 18, 41)
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42)
+    doc.text(`${payments.length} Registros`, 18, 48)
 
-    const tableRows = []
-    let totalCollected = 0
-    let totalJyJProfit = 0
+    // Col 2: Abono a Capital
+    doc.setFontSize(7)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(100, 116, 139)
+    doc.text("RETORNO CAPITAL", 18 + colW, 41)
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42)
+    doc.text(`$${(grandPrincipal / 100).toLocaleString('es-CO')}`, 18 + colW, 48)
 
-    for (const p of payments) {
-      totalCollected += p.amountPaid
-      totalJyJProfit += p.jyjProfit
+    // Col 3: Interés y Mora
+    doc.setFontSize(7)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(100, 116, 139)
+    doc.text("INTERÉS + MORA", 18 + (colW * 2), 41)
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42)
+    doc.text(`$${((grandInterest + grandLate) / 100).toLocaleString('es-CO')}`, 18 + (colW * 2), 48)
 
-      const investorNames = p.investorsBreakdown?.map((inv: any) => `${inv.name} ($${(inv.investorPayout / 100).toLocaleString('es-CO')})`).join(', ') || 'Fondeo Propio'
+    // Col 4: Gran Total
+    doc.setFontSize(7)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(37, 99, 235)
+    doc.text("TOTAL RECAUDO", 18 + (colW * 3), 41)
+    doc.setFontSize(11)
+    doc.setTextColor(37, 99, 235)
+    doc.text(`$${(grandTotal / 100).toLocaleString('es-CO')}`, 18 + (colW * 3), 48)
 
-      tableRows.push([
-        p.clientName,
-        `#${p.installmentNumber}`,
-        `$${(p.amountPaid / 100).toLocaleString('es-CO')}`,
-        `$${(p.jyjProfit / 100).toLocaleString('es-CO')}`,
-        investorNames
-      ])
-    }
+    // Tabla de Detalle
+    const tableBody = payments.map((p, idx) => {
+      const baseCuota = (p.principalPart || 0) + (p.interestPart || 0)
+      const mora = p.lateFee || 0
+      return [
+        (idx + 1).toString(),
+        `${p.clientName}\nCC: ${p.idDocument}${p.clientPhone ? ` • Tel: ${p.clientPhone}` : ''}`,
+        `#${p.loanId.slice(-6).toUpperCase()}`,
+        `Cuota ${p.installmentNumber} / ${p.numberOfInstallments || '-'}`,
+        `$${(p.principalPart / 100).toLocaleString('es-CO')}`,
+        `$${(p.interestPart / 100).toLocaleString('es-CO')}${mora > 0 ? `\n(+$${(mora / 100).toLocaleString('es-CO')} mora)` : ''}`,
+        `$${(p.amountPaid / 100).toLocaleString('es-CO')}`
+      ]
+    })
 
     autoTable(doc, {
-      startY: 32,
-      head: [['Cliente', 'Cuota', 'Recaudado', 'Ganancia JyJ', 'Pago Inversionistas']],
-      body: tableRows,
+      startY: 58,
+      head: [['#', 'Cliente / Identificación', 'Ref.', 'Cuota', 'Capital', 'Interés/Mora', 'Total Cobro']],
+      body: tableBody,
       theme: 'grid',
-      headStyles: { fillColor: [142, 68, 173] },
-      styles: { fontSize: 8 },
+      headStyles: { 
+        fillColor: [30, 41, 59], 
+        textColor: [255, 255, 255], 
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'left'
+      },
+      bodyStyles: { 
+        fontSize: 8,
+        textColor: [51, 65, 85]
+      },
+      alternateRowStyles: { 
+        fillColor: [248, 250, 252] 
+      },
       columnStyles: {
-        0: { cellWidth: 35 },
-        1: { cellWidth: 15 },
-        2: { cellWidth: 25 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 80 }
+        0: { cellWidth: 8, halign: 'center' },
+        1: { cellWidth: 62 },
+        2: { cellWidth: 18, fontStyle: 'bold', halign: 'center' },
+        3: { cellWidth: 24, halign: 'center' },
+        4: { cellWidth: 22, halign: 'right' },
+        5: { cellWidth: 24, halign: 'right' },
+        6: { cellWidth: 24, halign: 'right', fontStyle: 'bold', textColor: [37, 99, 235] }
+      },
+      foot: [[
+        { content: 'TOTALES CONSOLIDADOS', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(grandPrincipal / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${((grandInterest + grandLate) / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(grandTotal / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [37, 99, 235] } }
+      ]],
+      footStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [15, 23, 42],
+        fontSize: 8.5
+      },
+      didDrawPage: (data) => {
+        // Pie de Página
+        doc.setFontSize(7)
+        doc.setTextColor(148, 163, 184)
+        doc.text(
+          `JyJ Préstamos • Sistema de Gestión Crediticia • Generado por Usuario del Sistema`,
+          14,
+          pageHeight - 8
+        )
+        doc.text(
+          `Página ${data.pageNumber}`,
+          pageWidth - 14,
+          pageHeight - 8,
+          { align: 'right' }
+        )
       }
     })
 
-    let currentY = (doc as any).lastAutoTable.finalY + 8
-    if (currentY > 260) {
-      doc.addPage()
-      currentY = 20
-    }
+    doc.save(`${isProforma ? 'Pre_Liquidacion_Cobros' : 'Recibo_Lote_Clientes'}_${new Date().getTime()}.pdf`)
+  }
 
-    doc.setFillColor(142, 68, 173)
-    doc.rect(14, currentY, 182, 10, 'F')
-    doc.setTextColor(255, 255, 255)
+  const generateInternalSettlementPDF = (payments: any[]) => {
+    const doc = new jsPDF('landscape')
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+
+    // Encabezado Corporativo
+    doc.setFillColor(15, 23, 42) // Slate 900
+    doc.rect(0, 0, pageWidth, 28, 'F')
+
+    // Barra de acento
+    doc.setFillColor(168, 85, 247) // Purple 500
+    doc.rect(0, 28, pageWidth, 2, 'F')
+
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(10)
-    doc.text(`TOTAL RECAUDO: $${(totalCollected / 100).toLocaleString('es-CO')} | GANANCIA TOTAL JYJ: $${(totalJyJProfit / 100).toLocaleString('es-CO')}`, 20, currentY + 7)
+    doc.setFontSize(14)
+    doc.setTextColor(255, 255, 255)
+    doc.text("JYJ PRÉSTAMOS - LIQUIDACIÓN INTERNA & CUADRE DE CAJA", 14, 12)
 
-    doc.save(`Informe_Liquidacion_Interna_${new Date().getTime()}.pdf`)
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(192, 132, 252)
+    doc.text("CONFIDENCIAL • REPORTE FINANCIERO DE CAJA Y DISTRIBUCIÓN DE RENTABILIDAD", 14, 18)
+    doc.setTextColor(148, 163, 184)
+    doc.text("Exclusivo para Gerencia y Administración", 14, 23)
+
+    // Metadatos a la derecha
+    doc.setFontSize(8)
+    doc.setTextColor(255, 255, 255)
+    doc.text(`Fecha Emisión: ${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`, pageWidth - 14, 12, { align: "right" })
+    doc.setTextColor(168, 85, 247)
+    doc.text(`Préstamos Liquidados: ${payments.length}`, pageWidth - 14, 18, { align: "right" })
+
+    // Cálculos Contables Maestros
+    let totalCollected = 0
+    let totalPrincipal = 0
+    let totalInterest = 0
+    let totalSecretary = 0
+    let totalReferral = 0
+    let totalJyJPlatform = 0
+    let totalInvestors = 0
+    let totalJyJProfit = 0
+
+    payments.forEach(p => {
+      totalCollected += p.amountPaid || 0
+      totalPrincipal += p.principalPart || 0
+      totalInterest += p.totalInterest || ((p.interestPart || 0) + (p.lateFee || 0))
+      totalSecretary += p.secretaryCommissionAmount || 0
+      totalReferral += p.referralFee || 0
+      totalJyJPlatform += p.jyjPlatformFee || 0
+      totalJyJProfit += p.jyjProfit || 0
+
+      if (p.investorsBreakdown) {
+        p.investorsBreakdown.forEach((inv: any) => {
+          totalInvestors += inv.investorPayout || 0
+        })
+      }
+    })
+
+    // Resumen Ejecutivo en 5 Tarjetas Contables
+    doc.setFillColor(248, 250, 252)
+    doc.roundedRect(14, 34, pageWidth - 28, 20, 2, 2, 'F')
+    doc.setDrawColor(226, 232, 240)
+    doc.roundedRect(14, 34, pageWidth - 28, 20, 2, 2, 'S')
+
+    const kpiW = (pageWidth - 28) / 5
+
+    // 1. Total Recaudo
+    doc.setFontSize(7)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(100, 116, 139)
+    doc.text("TOTAL RECAUDADO", 18, 41)
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42)
+    doc.text(`$${(totalCollected / 100).toLocaleString('es-CO')}`, 18, 48)
+
+    // 2. Retorno Inversionistas
+    doc.setFontSize(7)
+    doc.setTextColor(100, 116, 139)
+    doc.text("PAGO INVERSIONISTAS", 18 + kpiW, 41)
+    doc.setFontSize(10)
+    doc.setTextColor(217, 119, 6) // Amber 600
+    doc.text(`$${(totalInvestors / 100).toLocaleString('es-CO')}`, 18 + kpiW, 48)
+
+    // 3. Comisión Secretaría & Ref.
+    doc.setFontSize(7)
+    doc.setTextColor(100, 116, 139)
+    doc.text("COMISIONES / NÓMINA", 18 + (kpiW * 2), 41)
+    doc.setFontSize(10)
+    doc.setTextColor(225, 29, 72) // Rose 600
+    doc.text(`$${((totalSecretary + totalReferral) / 100).toLocaleString('es-CO')}`, 18 + (kpiW * 2), 48)
+
+    // 4. Retorno Capital Propio JyJ
+    doc.setFontSize(7)
+    doc.setTextColor(100, 116, 139)
+    doc.text("CAPITAL RECUPERADO", 18 + (kpiW * 3), 41)
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42)
+    doc.text(`$${(totalPrincipal / 100).toLocaleString('es-CO')}`, 18 + (kpiW * 3), 48)
+
+    // 5. Utilidad Neta JyJ
+    doc.setFontSize(7)
+    doc.setTextColor(147, 51, 234)
+    doc.text("UTILIDAD NETA JYJ", 18 + (kpiW * 4), 41)
+    doc.setFontSize(11)
+    doc.setTextColor(147, 51, 234)
+    doc.text(`$${(totalJyJProfit / 100).toLocaleString('es-CO')}`, 18 + (kpiW * 4), 48)
+
+    // Tabla Contable Detallada
+    const tableRows = payments.map((p, idx) => {
+      let invDetails = "Fondeo Propio (100% JyJ)"
+      if (p.investorsBreakdown && p.investorsBreakdown.length > 0) {
+        invDetails = p.investorsBreakdown
+          .map((inv: any) => `${inv.name} (${inv.percentage}%): $${(inv.investorPayout / 100).toLocaleString('es-CO')}`)
+          .join('\n')
+      }
+
+      let commDetails = []
+      if (p.secretaryCommissionAmount > 0) commDetails.push(`Secr: $${(p.secretaryCommissionAmount / 100).toLocaleString('es-CO')}`)
+      if (p.referralFee > 0) commDetails.push(`Ref: $${(p.referralFee / 100).toLocaleString('es-CO')}`)
+      const commStr = commDetails.length > 0 ? commDetails.join('\n') : '$0'
+
+      return [
+        (idx + 1).toString(),
+        `${p.clientName}\nCC: ${p.idDocument}`,
+        `#${p.loanId.slice(-6).toUpperCase()}\nCta ${p.installmentNumber}`,
+        `$${(p.amountPaid / 100).toLocaleString('es-CO')}`,
+        `$${(p.principalPart / 100).toLocaleString('es-CO')}`,
+        `$${(p.totalInterest / 100).toLocaleString('es-CO')}`,
+        commStr,
+        invDetails,
+        `$${(p.jyjProfit / 100).toLocaleString('es-CO')}`
+      ]
+    })
+
+    autoTable(doc, {
+      startY: 58,
+      head: [['#', 'Cliente', 'Ref/Cuota', 'Recaudado', 'Capital', 'Interés', 'Comisiones', 'Liquidación Inversionistas', 'Utilidad JyJ']],
+      body: tableRows,
+      theme: 'grid',
+      headStyles: { 
+        fillColor: [88, 28, 135], // Purple 900
+        textColor: [255, 255, 255], 
+        fontStyle: 'bold',
+        fontSize: 7.5,
+        halign: 'left'
+      },
+      bodyStyles: { 
+        fontSize: 7.5,
+        textColor: [51, 65, 85]
+      },
+      alternateRowStyles: { 
+        fillColor: [250, 245, 255] // Purple 50
+      },
+      columnStyles: {
+        0: { cellWidth: 7, halign: 'center' },
+        1: { cellWidth: 45 },
+        2: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
+        3: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
+        4: { cellWidth: 22, halign: 'right' },
+        5: { cellWidth: 22, halign: 'right' },
+        6: { cellWidth: 26, halign: 'right' },
+        7: { cellWidth: 70 },
+        8: { cellWidth: 26, halign: 'right', fontStyle: 'bold', textColor: [147, 51, 234] }
+      },
+      foot: [[
+        { content: 'TOTALES DE LIQUIDACIÓN', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(totalCollected / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(totalPrincipal / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(totalInterest / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${((totalSecretary + totalReferral) / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(totalInvestors / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(totalJyJProfit / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [147, 51, 234] } }
+      ]],
+      footStyles: {
+        fillColor: [243, 232, 255],
+        textColor: [15, 23, 42],
+        fontSize: 8
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(7)
+        doc.setTextColor(148, 163, 184)
+        doc.text(
+          `JyJ Préstamos • Sistema de Liquidación Interna • Confidencial Gerencial`,
+          14,
+          pageHeight - 8
+        )
+        doc.text(
+          `Página ${data.pageNumber}`,
+          pageWidth - 14,
+          pageHeight - 8,
+          { align: 'right' }
+        )
+      }
+    })
+
+    doc.save(`Liquidacion_Interna_JyJ_${new Date().getTime()}.pdf`)
   }
 
   return (

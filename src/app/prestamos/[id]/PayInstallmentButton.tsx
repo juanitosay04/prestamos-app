@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
-import { Check, Loader2, X, Printer } from "lucide-react"
+import { Check, Loader2, X, Printer, MessageCircle } from "lucide-react"
 import { payInstallment } from "@/app/actions/payment"
 import { useReactToPrint } from "react-to-print"
 import { ReceiptTemplate, ReceiptData } from "@/components/ReceiptTemplate"
@@ -15,24 +15,32 @@ export function PayInstallmentButton({
   dueDate,
   expectedAmount,
   amountPaid,
+  principalPart,
+  interestPart,
   loanId,
   clientName,
   idDocument,
+  clientPhone,
   installmentNumber,
   totalInstallments,
-  defaultedAt
+  defaultedAt,
+  totalOutstanding
 }: { 
   installmentId: string
   status: string
   dueDate: Date
   expectedAmount: number
   amountPaid: number
+  principalPart?: number
+  interestPart?: number
   loanId: string
   clientName: string
   idDocument: string
+  clientPhone?: string
   installmentNumber: number
   totalInstallments?: number
   defaultedAt?: Date | null
+  totalOutstanding?: number
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -88,15 +96,21 @@ export function PayInstallmentButton({
       toast.error(result.error)
     } else {
       toast.success("Pago registrado correctamente")
+      const newOutstanding = totalOutstanding !== undefined ? Math.max(0, totalOutstanding - amountInCents) : undefined
+
       setReceiptData({
         loanId,
         clientName,
         idDocument,
+        clientPhone,
         installmentNumber,
         totalInstallments,
         amountPaid: amountInCents + moraInCents,
         paymentDate: new Date(),
-        moraPaid: moraInCents
+        moraPaid: moraInCents,
+        principalPaid: principalPart,
+        interestPaid: interestPart,
+        remainingBalance: newOutstanding
       })
       setIsSuccess(true)
     }
@@ -108,6 +122,33 @@ export function PayInstallmentButton({
     if (isSuccess) {
       window.location.reload()
     }
+  }
+
+  const handleSendWhatsApp = () => {
+    if (!receiptData) return
+    const cleanPhone = (clientPhone || "").replace(/\D/g, "")
+    const fullPhone = cleanPhone.startsWith("57") ? cleanPhone : "57" + cleanPhone
+
+    const baseAbono = Math.max(0, receiptData.amountPaid - receiptData.moraPaid)
+    const fecha = new Date(receiptData.paymentDate).toLocaleDateString("es-CO")
+    const hora = new Date(receiptData.paymentDate).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })
+
+    const msg = `*JYJ PRÉSTAMOS - COMPROBANTE DE PAGO* 🧾\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `👤 *Cliente:* ${receiptData.clientName}\n` +
+      `📄 *Documento:* ${receiptData.idDocument}\n` +
+      `🔖 *Ref. Préstamo:* #${receiptData.loanId.slice(-6).toUpperCase()}\n` +
+      `📅 *Fecha:* ${fecha} ${hora}\n` +
+      `🔢 *Concepto:* Cuota #${receiptData.installmentNumber}${receiptData.totalInstallments ? ` de ${receiptData.totalInstallments}` : ''}\n\n` +
+      `💵 *Abono a Cuota:* $${(baseAbono / 100).toLocaleString("es-CO")}\n` +
+      (receiptData.moraPaid > 0 ? `⚠️ *Recargo por Mora:* $${(receiptData.moraPaid / 100).toLocaleString("es-CO")}\n` : '') +
+      `💰 *TOTAL PAGADO:* $${(receiptData.amountPaid / 100).toLocaleString("es-CO")}\n` +
+      (receiptData.remainingBalance !== undefined ? `📉 *Saldo Deuda Restante:* $${(receiptData.remainingBalance / 100).toLocaleString("es-CO")}\n` : '') +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `_¡Muchas gracias por su puntualidad! Conserve este comprobante como soporte oficial._`
+
+    const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`
+    window.open(url, "_blank")
   }
 
   const isPaid = status === "PAID";
@@ -129,7 +170,7 @@ export function PayInstallmentButton({
       )}
 
       {isOpen && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
           <div className="bg-card w-full max-w-md max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
             <div className="flex justify-between items-center p-6 border-b border-white/5">
               <h2 className="text-xl font-bold text-white">{isSuccess ? "Pago Exitoso" : "Confirmar Pago"}</h2>
@@ -140,22 +181,34 @@ export function PayInstallmentButton({
             
             {isSuccess && receiptData ? (
               <div className="p-6 flex flex-col items-center gap-4 overflow-y-auto">
-                <div className="h-16 w-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mb-2">
+                <div className="h-16 w-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mb-1">
                   <Check className="h-8 w-8" />
                 </div>
-                <p className="text-white text-center font-medium">El pago se ha registrado correctamente.</p>
+                <div className="text-center">
+                  <h3 className="text-lg font-bold text-white">¡Pago Procesado con Éxito!</h3>
+                  <p className="text-xs text-muted-foreground mt-1">El comprobante oficial ha sido generado y el estado de la cuota actualizado.</p>
+                </div>
                 
-                <div className="w-full mt-4 flex flex-col gap-3">
+                <div className="w-full mt-3 flex flex-col gap-2.5">
                   <button 
                     onClick={handlePrint}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-98"
                   >
-                    <Printer className="h-5 w-5" />
-                    Imprimir Recibo
+                    <Printer className="h-4 w-4" />
+                    Imprimir Recibo Térmico (POS)
                   </button>
+
+                  <button 
+                    onClick={handleSendWhatsApp}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-98"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Enviar Comprobante por WhatsApp
+                  </button>
+
                   <button 
                     onClick={handleClose}
-                    className="w-full bg-white/5 hover:bg-white/10 text-white px-4 py-3 rounded-xl font-medium transition-colors"
+                    className="w-full bg-white/[0.06] hover:bg-white/[0.12] text-white px-4 py-2.5 rounded-xl font-medium text-xs transition-colors"
                   >
                     Cerrar
                   </button>

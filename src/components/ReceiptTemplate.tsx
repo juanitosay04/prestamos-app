@@ -6,11 +6,14 @@ export type ReceiptData = {
   loanId: string
   clientName: string
   idDocument: string
+  clientPhone?: string
   installmentNumber: number
   totalInstallments?: number
   amountPaid: number
   paymentDate: Date
   moraPaid: number
+  principalPaid?: number
+  interestPaid?: number
   remainingBalance?: number
 }
 
@@ -20,66 +23,104 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, { data: ReceiptData }>
 
   return (
     <div className="hidden">
-      <div ref={ref} className="p-8 max-w-[80mm] mx-auto bg-white text-black font-sans text-sm">
-        <div className="text-center mb-6">
-          <h1 className="text-xl font-black uppercase tracking-wider mb-1">JyJ Préstamos</h1>
-          <p className="text-xs text-gray-600 font-medium">Inversiones & Soluciones Financieras</p>
-          <div className="mt-3 border-b-2 border-black pb-2 border-dashed">
-            <span className="text-xs font-bold uppercase bg-gray-100 px-2 py-0.5 rounded">Comprobante de Pago</span>
+      <div 
+        ref={ref} 
+        className="p-6 max-w-[80mm] mx-auto bg-white text-black font-mono text-[11px] leading-tight select-none"
+      >
+        {/* Encabezado */}
+        <div className="text-center mb-4">
+          <h1 className="text-base font-black uppercase tracking-wider mb-0.5">JYJ PRÉSTAMOS</h1>
+          <p className="text-[10px] text-gray-700 font-semibold uppercase tracking-wide">Soluciones Financieras & Inversiones</p>
+          <p className="text-[9px] text-gray-500 font-sans mt-0.5">NIT / ID: 901.458.239-1</p>
+          <div className="my-2 border-y border-black py-1">
+            <span className="text-[11px] font-black uppercase tracking-wider">COMPROBANTE OFICIAL DE PAGO</span>
           </div>
+          <p className="text-[9px] text-gray-600 font-sans">
+            Recibo No: <strong className="font-mono text-black">REC-{data.loanId.slice(-6).toUpperCase()}-{data.installmentNumber}</strong>
+          </p>
         </div>
 
-        <div className="space-y-2 mb-5 text-xs">
+        {/* Datos del Cliente y Obligación */}
+        <div className="space-y-1.5 mb-3 border-b border-black/80 pb-2">
           <div className="flex justify-between">
-            <span className="font-bold text-gray-700">Fecha y Hora:</span>
-            <span>{paymentDate.toLocaleDateString("es-CO")} {paymentDate.toLocaleTimeString("es-CO", { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-gray-600">FECHA/HORA:</span>
+            <span className="font-bold">{paymentDate.toLocaleDateString("es-CO")} {paymentDate.toLocaleTimeString("es-CO", { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
           <div className="flex justify-between">
-            <span className="font-bold text-gray-700">Cliente:</span>
-            <span className="text-right font-semibold">{data.clientName}</span>
+            <span className="text-gray-600">TITULAR:</span>
+            <span className="font-black text-right max-w-[170px] truncate">{data.clientName}</span>
           </div>
           <div className="flex justify-between">
-            <span className="font-bold text-gray-700">Cédula / DNI:</span>
-            <span className="font-mono">{data.idDocument}</span>
+            <span className="text-gray-600">DOCUMENTO:</span>
+            <span className="font-bold">{data.idDocument}</span>
+          </div>
+          {data.clientPhone && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">TELÉFONO:</span>
+              <span>{data.clientPhone}</span>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <span className="text-gray-600">PRÉSTAMO REF:</span>
+            <span className="font-bold font-mono">#{data.loanId.slice(-8).toUpperCase()}</span>
           </div>
           <div className="flex justify-between">
-            <span className="font-bold text-gray-700">Ref. Préstamo:</span>
-            <span className="font-mono font-bold">#{data.loanId.slice(-6).toUpperCase()}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="font-bold text-gray-700">Cuota Aplicada:</span>
-            <span className="font-bold text-gray-900">
-              #{data.installmentNumber} {data.totalInstallments ? `de ${data.totalInstallments}` : ''}
+            <span className="text-gray-600">CONCEPTO:</span>
+            <span className="font-black text-black">
+              CUOTA #{data.installmentNumber} {data.totalInstallments ? `DE ${data.totalInstallments}` : ''}
             </span>
           </div>
         </div>
 
-        <div className="border-t border-black border-dashed pt-3 mb-5 space-y-2 text-xs">
+        {/* Desglose del Pago */}
+        <div className="space-y-1.5 mb-3">
           <div className="flex justify-between">
-            <span className="text-gray-700">Abono a Cuota</span>
-            <span className="font-semibold">${(baseInstallmentPaid / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
+            <span className="text-gray-700">Abono Cuota:</span>
+            <span className="font-bold">${(baseInstallmentPaid / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
           </div>
-          {data.moraPaid > 0 && (
-            <div className="flex justify-between text-red-600">
-              <span>Recargo por Mora</span>
-              <span className="font-semibold">+ ${(data.moraPaid / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
+
+          {data.principalPaid !== undefined && data.principalPaid > 0 && (
+            <div className="flex justify-between text-[10px] text-gray-600 pl-2">
+              <span>• Abono a Capital:</span>
+              <span>${(data.principalPaid / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
             </div>
           )}
-          <div className="flex justify-between font-black text-base mt-2 border-t-2 border-black pt-2">
-            <span>TOTAL RECIBIDO</span>
-            <span>${(data.amountPaid / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
+
+          {data.interestPaid !== undefined && data.interestPaid > 0 && (
+            <div className="flex justify-between text-[10px] text-gray-600 pl-2">
+              <span>• Interés Corriente:</span>
+              <span>${(data.interestPaid / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
+            </div>
+          )}
+
+          {data.moraPaid > 0 && (
+            <div className="flex justify-between text-black font-bold">
+              <span>Recargo por Mora:</span>
+              <span>+ ${(data.moraPaid / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
+            </div>
+          )}
+
+          {/* Gran Total */}
+          <div className="border-t-2 border-black pt-1.5 mt-2 flex justify-between text-xs font-black">
+            <span>TOTAL RECIBIDO:</span>
+            <span className="text-sm">${(data.amountPaid / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
           </div>
+
           {data.remainingBalance !== undefined && (
-            <div className="flex justify-between text-[11px] text-gray-600 pt-1 border-t border-gray-200">
-              <span>Saldo Pendiente Estimado:</span>
-              <span className="font-bold text-gray-800">${(data.remainingBalance / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
+            <div className="flex justify-between text-[10px] text-gray-700 pt-1.5 mt-1 border-t border-dashed border-gray-400">
+              <span className="font-bold">Saldo Deuda Restante:</span>
+              <span className="font-bold">${(data.remainingBalance / 100).toLocaleString("es-CO", { minimumFractionDigits: 0 })}</span>
             </div>
           )}
         </div>
 
-        <div className="text-center text-[11px] mt-6 pt-3 border-t border-black border-dashed text-gray-600">
-          <p className="font-bold text-black mb-1">¡Gracias por su puntualidad!</p>
-          <p>Conserve este comprobante como respaldo oficial de su pago.</p>
+        {/* Pie de Página y Seguridad */}
+        <div className="text-center text-[9px] mt-4 pt-3 border-t border-black border-dashed text-gray-600 font-sans space-y-1">
+          <p className="font-bold text-black uppercase text-[10px]">¡Gracias por su puntualidad!</p>
+          <p>Conserve este soporte oficial como comprobante de pago.</p>
+          <p className="text-[8px] text-gray-400 mt-1 font-mono">
+            SISTEMA JYJ FINTECH • VAL: {data.loanId.slice(0, 4)}-{Date.now().toString().slice(-4)}
+          </p>
         </div>
       </div>
     </div>

@@ -202,10 +202,45 @@ export async function processBatchInstallments(loanIds: string[]) {
       if (payResult.error) {
         results.push({ loanId, success: false, error: payResult.error })
       } else {
+        const totalInterest = installment.interestPart + (installment.lateFee || 0)
+        
+        let secCommAmount = 0
+        if (installment.loan.secretaryCommissionType === "FIXED_AMOUNT") {
+          secCommAmount = Math.round(installment.loan.secretaryCommission / installment.loan.numberOfInstallments)
+        } else if (installment.loan.secretaryCommissionType === "PERCENTAGE_PRINCIPAL") {
+          secCommAmount = Math.round((installment.loan.principalAmount * (installment.loan.secretaryCommission / 100)) / installment.loan.numberOfInstallments)
+        } else {
+          secCommAmount = Math.round(totalInterest * (installment.loan.secretaryCommission / 100))
+        }
+
+        const jyjPlatformFee = Math.round(totalInterest * 0.20)
+        const referralFee = referredByInvestorName ? Math.round(totalInterest * 0.03) : 0
+        const remainingInterest = Math.max(0, totalInterest - secCommAmount - jyjPlatformFee - referralFee)
+
+        const totalInvPct = (installment.loan.investors || []).reduce((sum: number, inv: any) => sum + inv.participationPercentage, 0)
+        const jyjSelfFundingPct = Math.max(0, 100 - totalInvPct)
+        
+        const investorsBreakdown = (installment.loan.investors || []).map((inv: any) => {
+          const cap = Math.round(installment.principalPart * (inv.participationPercentage / 100))
+          const int = Math.round(remainingInterest * (inv.participationPercentage / 100))
+          return {
+            name: inv.investor?.name || "Inversionista",
+            percentage: inv.participationPercentage,
+            capitalPayout: cap,
+            interestPayout: int,
+            investorPayout: cap + int
+          }
+        })
+
+        const jyjSelfCapital = Math.round(installment.principalPart * (jyjSelfFundingPct / 100))
+        const jyjSelfInterest = Math.round(remainingInterest * (jyjSelfFundingPct / 100))
+        const totalJyJProfit = jyjPlatformFee + jyjSelfInterest
+
         results.push({ 
           loanId, 
           success: true, 
           clientName: `${installment.loan.client.firstName} ${installment.loan.client.lastName}`,
+          clientPhone: installment.loan.client.phone,
           idDocument: installment.loan.client.idDocument,
           amountPaid: installment.expectedAmount,
           installmentNumber: installment.installmentNumber,
@@ -215,9 +250,19 @@ export async function processBatchInstallments(loanIds: string[]) {
           numberOfInstallments: installment.loan.numberOfInstallments,
           secretaryCommissionType: installment.loan.secretaryCommissionType,
           secretaryCommission: installment.loan.secretaryCommission,
+          secretaryCommissionAmount: secCommAmount,
+          jyjPlatformFee,
+          referralFee,
           principalPart: installment.principalPart,
           interestPart: installment.interestPart,
-          lateFee: installment.lateFee,
+          lateFee: installment.lateFee || 0,
+          totalInterest,
+          remainingInterest,
+          investorsBreakdown,
+          jyjSelfCapital,
+          jyjSelfInterest,
+          jyjSelfFundingPct,
+          jyjProfit: totalJyJProfit,
           investors: installment.loan.investors || [],
           referredByInvestor: referredByInvestorName ? { name: referredByInvestorName } : null
         })
@@ -278,10 +323,45 @@ export async function getBatchInstallmentsInfo(loanIds: string[]) {
           if (refInv) referredByInvestorName = refInv.name
         }
 
+        const totalInterest = installment.interestPart + (installment.lateFee || 0)
+        
+        let secCommAmount = 0
+        if (installment.loan.secretaryCommissionType === "FIXED_AMOUNT") {
+          secCommAmount = Math.round(installment.loan.secretaryCommission / installment.loan.numberOfInstallments)
+        } else if (installment.loan.secretaryCommissionType === "PERCENTAGE_PRINCIPAL") {
+          secCommAmount = Math.round((installment.loan.principalAmount * (installment.loan.secretaryCommission / 100)) / installment.loan.numberOfInstallments)
+        } else {
+          secCommAmount = Math.round(totalInterest * (installment.loan.secretaryCommission / 100))
+        }
+
+        const jyjPlatformFee = Math.round(totalInterest * 0.20)
+        const referralFee = referredByInvestorName ? Math.round(totalInterest * 0.03) : 0
+        const remainingInterest = Math.max(0, totalInterest - secCommAmount - jyjPlatformFee - referralFee)
+
+        const totalInvPct = (installment.loan.investors || []).reduce((sum: number, inv: any) => sum + inv.participationPercentage, 0)
+        const jyjSelfFundingPct = Math.max(0, 100 - totalInvPct)
+        
+        const investorsBreakdown = (installment.loan.investors || []).map((inv: any) => {
+          const cap = Math.round(installment.principalPart * (inv.participationPercentage / 100))
+          const int = Math.round(remainingInterest * (inv.participationPercentage / 100))
+          return {
+            name: inv.investor?.name || "Inversionista",
+            percentage: inv.participationPercentage,
+            capitalPayout: cap,
+            interestPayout: int,
+            investorPayout: cap + int
+          }
+        })
+
+        const jyjSelfCapital = Math.round(installment.principalPart * (jyjSelfFundingPct / 100))
+        const jyjSelfInterest = Math.round(remainingInterest * (jyjSelfFundingPct / 100))
+        const totalJyJProfit = jyjPlatformFee + jyjSelfInterest
+
         results.push({ 
           loanId, 
           success: true, 
           clientName: `${installment.loan.client.firstName} ${installment.loan.client.lastName}`,
+          clientPhone: installment.loan.client.phone,
           idDocument: installment.loan.client.idDocument,
           amountPaid: installment.expectedAmount,
           installmentNumber: installment.installmentNumber,
@@ -291,9 +371,19 @@ export async function getBatchInstallmentsInfo(loanIds: string[]) {
           numberOfInstallments: installment.loan.numberOfInstallments,
           secretaryCommissionType: installment.loan.secretaryCommissionType,
           secretaryCommission: installment.loan.secretaryCommission,
+          secretaryCommissionAmount: secCommAmount,
+          jyjPlatformFee,
+          referralFee,
           principalPart: installment.principalPart,
           interestPart: installment.interestPart,
-          lateFee: installment.lateFee,
+          lateFee: installment.lateFee || 0,
+          totalInterest,
+          remainingInterest,
+          investorsBreakdown,
+          jyjSelfCapital,
+          jyjSelfInterest,
+          jyjSelfFundingPct,
+          jyjProfit: totalJyJProfit,
           investors: installment.loan.investors || [],
           referredByInvestor: referredByInvestorName ? { name: referredByInvestorName } : null
         })
