@@ -560,6 +560,7 @@ export async function registerPrincipalPayment(
 
     revalidatePath(`/prestamos/${loanId}`)
     revalidatePath("/prestamos")
+    revalidatePath("/", "layout")
     
     return result
   } catch (error: any) {

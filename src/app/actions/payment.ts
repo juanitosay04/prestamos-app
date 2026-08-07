@@ -111,7 +111,7 @@ export async function payInstallment(installmentId: string, lateFeeInCents: numb
 
     revalidatePath(`/prestamos/${installment.loanId}`)
     revalidatePath(`/prestamos`)
-    revalidatePath(`/`)
+    revalidatePath("/", "layout")
     
     return { success: true }
   } catch (error) {
@@ -286,7 +286,7 @@ export async function processBatchInstallments(loanIds: string[]) {
     }
 
     revalidatePath(`/prestamos`)
-    revalidatePath(`/`)
+    revalidatePath("/", "layout")
     
     return { success: true, results }
   } catch (error) {

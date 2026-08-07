@@ -84,7 +84,7 @@ export default async function Dashboard() {
     })
   })
 
-  // 3. Métricas del Mes Actual (Recaudado Real vs Proyectado & Gastos)
+  // 3. Métricas del Mes Actual (Flujo de Caja Real: Pagos Recibidos vs Gastos)
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
@@ -101,10 +101,46 @@ export default async function Dashboard() {
   })
   const monthlyExpenses = currentMonthExpenses.reduce((sum, exp) => sum + exp.amount, 0)
   
-  // Cuotas del Mes
-  const currentMonthInstallments = await prisma.installment.findMany({
+  // Pagos REALES recibidos en el mes actual (Caja Real)
+  const currentMonthPayments = await prisma.payment.findMany({
+    where: {
+      deletedAt: null,
+      paymentDate: {
+        gte: startOfMonth,
+        lte: endOfMonth
+      }
+    },
+    include: {
+      installment: true,
+      loan: true
+    }
+  })
+
+  let monthlyCollectedInterest = 0 // Ganancia real recaudada en caja (intereses + moras)
+  let monthlyCollectedPrincipal = 0 // Capital recuperado en caja este mes
+
+  currentMonthPayments.forEach(p => {
+    if (p.type === "PRINCIPAL") {
+      monthlyCollectedPrincipal += p.amountPaid
+    } else if (p.installment) {
+      const exp = p.installment.expectedAmount
+      const ratio = exp > 0 ? Math.min(1, p.amountPaid / exp) : 1
+      const interestPart = Math.round(p.installment.interestPart * ratio) + (p.lateFeeApplied || 0)
+      const principalPart = Math.max(0, p.amountPaid - (p.lateFeeApplied || 0) - Math.round(p.installment.interestPart * ratio))
+      
+      monthlyCollectedInterest += interestPart
+      monthlyCollectedPrincipal += principalPart
+    } else {
+      monthlyCollectedInterest += (p.lateFeeApplied || 0)
+      monthlyCollectedPrincipal += Math.max(0, p.amountPaid - (p.lateFeeApplied || 0))
+    }
+  })
+
+  // Cuotas pendientes de este mes para la meta proyectada
+  const pendingMonthInstallments = await prisma.installment.findMany({
     where: {
       loan: { deletedAt: null, status: { not: "REFINANCED" } },
+      status: { not: "PAID" },
       dueDate: {
         gte: startOfMonth,
         lte: endOfMonth
@@ -112,24 +148,14 @@ export default async function Dashboard() {
     }
   })
 
-  let monthlyProjectedInterest = 0
-  let monthlyCollectedInterest = 0
-
-  currentMonthInstallments.forEach(inst => {
-    monthlyProjectedInterest += inst.interestPart
-    if (inst.status === "PAID") {
-      monthlyCollectedInterest += inst.interestPart + (inst.lateFee || 0)
-    } else if (inst.status === "PARTIAL" && inst.amountPaid > 0) {
-      const ratio = inst.expectedAmount > 0 ? (inst.amountPaid / inst.expectedAmount) : 0
-      monthlyCollectedInterest += Math.round(inst.interestPart * ratio) + (inst.lateFee || 0)
-    }
-  })
+  const pendingMonthInterest = pendingMonthInstallments.reduce((sum, inst) => sum + inst.interestPart, 0)
+  const monthlyProjectedInterest = monthlyCollectedInterest + pendingMonthInterest
 
   const collectionProgressPercent = monthlyProjectedInterest > 0 
     ? Math.min(100, Math.round((monthlyCollectedInterest / monthlyProjectedInterest) * 100))
     : (monthlyCollectedInterest > 0 ? 100 : 0)
 
-  // Utilidad Neta Real en Caja (Recaudado - Gastos) y Proyectada a Cierre
+  // Utilidad Neta Real en Caja (Recaudado Real - Gastos) y Proyectada a Cierre
   const monthlyRealizedNetProfit = monthlyCollectedInterest - monthlyExpenses
   const monthlyProjectedNetProfit = monthlyProjectedInterest - monthlyExpenses
 
