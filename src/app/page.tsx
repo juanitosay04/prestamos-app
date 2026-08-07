@@ -26,36 +26,68 @@ export default async function Dashboard() {
   // Disparador de cierre mensual automático
   await runMonthlyCloseCheck()
   
+  // 1. Cartera Activa y Saldo Vivo en Calle
   const activeLoans = await prisma.loan.findMany({
-    where: { status: "ACTIVE", deletedAt: null },
+    where: { status: { in: ["ACTIVE", "OVERDUE"] }, deletedAt: null },
     include: { client: true, installments: true }
   })
 
-  const overdueLoans = await prisma.loan.count({
-    where: { status: "OVERDUE", deletedAt: null }
-  })
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
 
-  // Calculate metrics
-  let totalCapital = 0
+  let totalDisbursedCapital = 0
+  let totalOutstandingCapital = 0 // Saldo real de capital pendiente por recuperar
+  let overdueLoansCount = 0
+  let totalOverdueDebt = 0
+
   activeLoans.forEach(loan => {
-    totalCapital += loan.principalAmount
+    totalDisbursedCapital += loan.principalAmount
+    let loanHasOverdue = false
+
+    loan.installments.forEach(inst => {
+      if (inst.status === "PAID") {
+        // Ya pagado, saldo 0
+      } else if (inst.status === "PARTIAL") {
+        const remainingPrincipal = Math.max(0, inst.principalPart - inst.amountPaid)
+        totalOutstandingCapital += remainingPrincipal
+      } else {
+        // PENDING / LATE
+        totalOutstandingCapital += inst.principalPart
+      }
+
+      // Comprobar moras
+      if (inst.status !== "PAID") {
+        const dueDate = new Date(inst.dueDate)
+        dueDate.setHours(0, 0, 0, 0)
+        if (dueDate.getTime() < today.getTime()) {
+          loanHasOverdue = true
+          totalOverdueDebt += (inst.expectedAmount - inst.amountPaid)
+        }
+      }
+    })
+
+    if (loanHasOverdue || loan.status === "OVERDUE") {
+      overdueLoansCount++
+    }
   })
 
-  // Dinero Perdido (Capital pendiente de préstamos en DEFAULTED)
+  // 2. Dinero Perdido (Capital pendiente de préstamos en DEFAULTED)
   const defaultedLoans = await prisma.loan.findMany({
     where: { status: "DEFAULTED", deletedAt: null },
-    include: { installments: { where: { status: "PENDING" } } }
+    include: { installments: { where: { status: { not: "PAID" } } } }
   })
   
   let totalLostCapital = 0
   defaultedLoans.forEach(loan => {
-    loan.installments.forEach(inst => totalLostCapital += inst.principalPart)
+    loan.installments.forEach(inst => {
+      totalLostCapital += Math.max(0, inst.principalPart - inst.amountPaid)
+    })
   })
 
-  // Métricas del Mes Actual
-  const today = new Date()
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999)
+  // 3. Métricas del Mes Actual (Recaudado Real vs Proyectado & Gastos)
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
 
   // Gastos del Mes
   const currentMonthExpenses = await prisma.expense.findMany({
@@ -69,7 +101,7 @@ export default async function Dashboard() {
   })
   const monthlyExpenses = currentMonthExpenses.reduce((sum, exp) => sum + exp.amount, 0)
   
-  // Ingresos del Mes (Intereses de cuotas de este mes)
+  // Cuotas del Mes
   const currentMonthInstallments = await prisma.installment.findMany({
     where: {
       loan: { deletedAt: null, status: { not: "REFINANCED" } },
@@ -80,16 +112,26 @@ export default async function Dashboard() {
     }
   })
 
-  let monthlyExpectedIncome = 0
+  let monthlyProjectedInterest = 0
+  let monthlyCollectedInterest = 0
+
   currentMonthInstallments.forEach(inst => {
-    monthlyExpectedIncome += inst.interestPart
-    if (inst.status === "PAID" && inst.lateFee) {
-      monthlyExpectedIncome += inst.lateFee
+    monthlyProjectedInterest += inst.interestPart
+    if (inst.status === "PAID") {
+      monthlyCollectedInterest += inst.interestPart + (inst.lateFee || 0)
+    } else if (inst.status === "PARTIAL" && inst.amountPaid > 0) {
+      const ratio = inst.expectedAmount > 0 ? (inst.amountPaid / inst.expectedAmount) : 0
+      monthlyCollectedInterest += Math.round(inst.interestPart * ratio) + (inst.lateFee || 0)
     }
   })
 
-  // Utilidad Neta del Mes
-  const monthlyNetProfit = monthlyExpectedIncome - monthlyExpenses
+  const collectionProgressPercent = monthlyProjectedInterest > 0 
+    ? Math.min(100, Math.round((monthlyCollectedInterest / monthlyProjectedInterest) * 100))
+    : (monthlyCollectedInterest > 0 ? 100 : 0)
+
+  // Utilidad Neta Real en Caja (Recaudado - Gastos) y Proyectada a Cierre
+  const monthlyRealizedNetProfit = monthlyCollectedInterest - monthlyExpenses
+  const monthlyProjectedNetProfit = monthlyProjectedInterest - monthlyExpenses
 
   // Próximos Vencimientos
   const upcomingInstallments = await prisma.installment.findMany({
@@ -115,9 +157,10 @@ export default async function Dashboard() {
     where: { status: "PAID", deletedAt: null }
   })
   
+  const upToDateLoansCount = Math.max(0, activeLoans.length - overdueLoansCount)
   const portfolioData = [
-    { name: "Al Día", value: activeLoans.length, color: "#3b82f6" },
-    { name: "En Mora", value: overdueLoans, color: "#f59e0b" },
+    { name: "Al Día", value: upToDateLoansCount, color: "#3b82f6" },
+    { name: "En Mora", value: overdueLoansCount, color: "#f59e0b" },
     { name: "Liquidados", value: paidLoans, color: "#10b981" },
     { name: "Pérdida", value: defaultedLoans.length, color: "#ef4444" },
   ]
@@ -223,14 +266,14 @@ export default async function Dashboard() {
             {/* Cinta de KPIs Principales (4 Tarjetas Ejecutivas) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               
-              {/* Capital en Circulación */}
+              {/* 1. Saldo de Capital en Calle */}
               <div className="glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between border-l-4 border-l-blue-500">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block font-mono">
                       Cartera Activa
                     </span>
-                    <span className="text-xs text-muted-foreground">Capital en calle</span>
+                    <span className="text-xs text-muted-foreground">Capital vivo en calle</span>
                   </div>
                   <div className="p-2.5 bg-blue-500/10 rounded-xl text-blue-400 border border-blue-500/20">
                     <TrendingUp className="h-4 w-4" />
@@ -238,23 +281,25 @@ export default async function Dashboard() {
                 </div>
                 <div className="mt-2">
                   <h3 className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight">
-                    ${(totalCapital / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    ${(totalOutstandingCapital / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
                   </h3>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.04] text-[11px]">
-                    <span className="text-muted-foreground">Colocaciones activas</span>
-                    <span className="text-blue-400 font-bold font-mono">{activeLoans.length} créditos</span>
+                    <span className="text-muted-foreground">{activeLoans.length} {activeLoans.length === 1 ? 'crédito activo' : 'créditos activos'}</span>
+                    <span className="text-blue-400 font-mono font-medium" title="Capital inicial total desembolsado">
+                      ${(totalDisbursedCapital / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })} col.
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Ingresos Proyectados Mes */}
+              {/* 2. Intereses Recaudados en el Mes */}
               <div className="glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between border-l-4 border-l-emerald-500">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block font-mono">
-                      Ingreso Proyectado
+                      Intereses Recaudados
                     </span>
-                    <span className="text-xs text-muted-foreground">Intereses y moras (Mes)</span>
+                    <span className="text-xs text-muted-foreground">Ganancia en caja (Mes)</span>
                   </div>
                   <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
                     <DollarSign className="h-4 w-4" />
@@ -262,41 +307,49 @@ export default async function Dashboard() {
                 </div>
                 <div className="mt-2">
                   <h3 className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono tracking-tight">
-                    ${(monthlyExpectedIncome / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    ${(monthlyCollectedInterest / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
                   </h3>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.04] text-[11px]">
-                    <span className="text-muted-foreground">Margen bruto</span>
-                    <span className="text-emerald-400 font-bold font-mono">+100% cobro estimado</span>
+                    <span className="text-muted-foreground">
+                      Meta: ${(monthlyProjectedInterest / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    </span>
+                    <span className="text-emerald-400 font-bold font-mono">
+                      {collectionProgressPercent}% cobrado
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Utilidad Neta del Mes */}
+              {/* 3. Utilidad Neta Real en Caja (Mes) */}
               <div className="glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between border-l-4 border-l-indigo-500">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block font-mono">
                       Utilidad Neta (Mes)
                     </span>
-                    <span className="text-xs text-muted-foreground">Deduciendo egresos</span>
+                    <span className="text-xs text-muted-foreground">Caja neta realizada</span>
                   </div>
                   <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
                     <Wallet className="h-4 w-4" />
                   </div>
                 </div>
                 <div className="mt-2">
-                  <h3 className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight ${monthlyNetProfit >= 0 ? 'text-white' : 'text-rose-400'}`}>
-                    ${(monthlyNetProfit / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                  <h3 className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight ${monthlyRealizedNetProfit >= 0 ? 'text-white' : 'text-rose-400'}`}>
+                    ${(monthlyRealizedNetProfit / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
                   </h3>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.04] text-[11px]">
-                    <span className="text-muted-foreground">Gastos deducidos</span>
-                    <span className="text-rose-400 font-bold font-mono">-${(monthlyExpenses / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                    <span className="text-rose-400 font-mono">
+                      Gastos: -${(monthlyExpenses / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    </span>
+                    <span className="text-muted-foreground font-mono" title="Utilidad proyectada al cierre de mes">
+                      Proy: ${(monthlyProjectedNetProfit / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Clientes en Mora */}
-              <div className={`glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between border-l-4 ${overdueLoans > 0 ? 'border-l-amber-500' : 'border-l-emerald-500'}`}>
+              {/* 4. Créditos en Mora */}
+              <div className={`glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between border-l-4 ${overdueLoansCount > 0 ? 'border-l-amber-500' : 'border-l-emerald-500'}`}>
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block font-mono">
@@ -304,18 +357,20 @@ export default async function Dashboard() {
                     </span>
                     <span className="text-xs text-muted-foreground">Estado de cobro</span>
                   </div>
-                  <div className={`p-2.5 rounded-xl border ${overdueLoans > 0 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                  <div className={`p-2.5 rounded-xl border ${overdueLoansCount > 0 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
                     <AlertCircle className="h-4 w-4" />
                   </div>
                 </div>
                 <div className="mt-2">
-                  <h3 className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight ${overdueLoans > 0 ? 'text-amber-400' : 'text-white'}`}>
-                    {overdueLoans} <span className="text-sm font-normal text-muted-foreground font-sans">{overdueLoans === 1 ? 'crédito' : 'créditos'}</span>
+                  <h3 className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight ${overdueLoansCount > 0 ? 'text-amber-400' : 'text-white'}`}>
+                    {overdueLoansCount} <span className="text-sm font-normal text-muted-foreground font-sans">{overdueLoansCount === 1 ? 'crédito' : 'créditos'}</span>
                   </h3>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.04] text-[11px]">
                     <span className="text-muted-foreground">Estado cartera</span>
-                    <span className={`font-bold ${overdueLoans > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                      {overdueLoans > 0 ? 'Gestión requerida' : 'Cartera 100% al día'}
+                    <span className={`font-bold ${overdueLoansCount > 0 ? 'text-amber-400 font-mono text-[10px]' : 'text-emerald-400'}`}>
+                      {overdueLoansCount > 0 
+                        ? `Vencido: $${(totalOverdueDebt / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}` 
+                        : 'Cartera 100% al día'}
                     </span>
                   </div>
                 </div>
