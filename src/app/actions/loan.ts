@@ -737,3 +737,79 @@ export async function updateLoan(loanId: string, data: any) {
     return { error: error.message || "Error al actualizar el préstamo" }
   }
 }
+
+export async function uploadPromissoryNote(loanId: string, fileDataUrl: string, fileName: string) {
+  try {
+    const session = await getSession()
+    if (!session) {
+      return { error: "No autorizado. Inicie sesión nuevamente." }
+    }
+
+    if (!fileDataUrl || !fileName) {
+      return { error: "Archivo no válido o vacío." }
+    }
+
+    const updatedLoan = await prisma.loan.update({
+      where: { id: loanId },
+      data: {
+        promissoryNoteUrl: fileDataUrl,
+        promissoryNoteName: fileName,
+        promissoryNoteUploadedAt: new Date()
+      },
+      include: { client: true }
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.userId,
+        action: "UPLOAD_PROMISSORY_NOTE",
+        entityType: "Loan",
+        entityId: loanId,
+        details: JSON.stringify({ fileName, client: `${updatedLoan.client.firstName} ${updatedLoan.client.lastName}` })
+      }
+    })
+
+    revalidatePath(`/prestamos/${loanId}`)
+    revalidatePath("/prestamos")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error uploading promissory note:", error)
+    return { error: "Error al guardar el pagaré firmado" }
+  }
+}
+
+export async function deletePromissoryNote(loanId: string) {
+  try {
+    const session = await getSession()
+    if (!session) {
+      return { error: "No autorizado" }
+    }
+
+    await prisma.loan.update({
+      where: { id: loanId },
+      data: {
+        promissoryNoteUrl: null,
+        promissoryNoteName: null,
+        promissoryNoteUploadedAt: null
+      }
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.userId,
+        action: "DELETE_PROMISSORY_NOTE",
+        entityType: "Loan",
+        entityId: loanId,
+        details: JSON.stringify({ loanId })
+      }
+    })
+
+    revalidatePath(`/prestamos/${loanId}`)
+    revalidatePath("/prestamos")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error deleting promissory note:", error)
+    return { error: "Error al eliminar el pagaré" }
+  }
+}
+

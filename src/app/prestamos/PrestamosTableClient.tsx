@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Briefcase, Calendar, FileDown, Printer, Loader2, Check, ShieldAlert, ChevronRight, User } from "lucide-react"
+import { Briefcase, Calendar, FileDown, Printer, Loader2, Check, ShieldAlert, ChevronRight, User, FileCheck, FileText } from "lucide-react"
 import Link from "next/link"
 import { processBatchInstallments, getBatchInstallmentsInfo } from "@/app/actions/payment"
 import jsPDF from "jspdf"
@@ -545,7 +545,19 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                           </div>
                           <div>
                             <p className="text-white font-bold text-xs">{loan.client.firstName} {loan.client.lastName}</p>
-                            <p className="text-[10px] text-muted-foreground font-mono">ID: {loan.id.slice(0, 8).toUpperCase()}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] text-muted-foreground font-mono">ID: {loan.id.slice(0, 8).toUpperCase()}</span>
+                              <span className="text-[9px] text-muted-foreground">•</span>
+                              {loan.promissoryNoteUrl ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium" title="Pagaré firmado custodiado">
+                                  <FileCheck className="h-3 w-3" /> Pagaré OK
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-400/80 font-normal" title="Sin pagaré firmado subido">
+                                  <FileText className="h-3 w-3 opacity-70" /> Sin Pagaré
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>

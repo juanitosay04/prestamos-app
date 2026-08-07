@@ -11,6 +11,7 @@ import { EditLoanButton } from "./EditLoanButton"
 import { PrintClearanceButton } from "./PrintClearanceButton"
 import { PrincipalPaymentButton } from "./PrincipalPaymentButton"
 import { MarkDefaultedButton, ReviveLoanButton } from "./DefaultLoanButtons"
+import { PromissoryNoteCard } from "./PromissoryNoteCard"
 import { getSession } from "@/lib/session"
 
 export default async function LoanDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -301,6 +302,16 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                 )}
               </div>
             </div>
+
+            {/* Custodia y Gestión del Pagaré Firmado */}
+            <PromissoryNoteCard
+              loanId={loan.id}
+              promissoryNoteUrl={loan.promissoryNoteUrl}
+              promissoryNoteName={loan.promissoryNoteName}
+              promissoryNoteUploadedAt={loan.promissoryNoteUploadedAt}
+              clientName={`${loan.client.firstName} ${loan.client.lastName}`}
+              idDocument={loan.client.idDocument}
+            />
 
             {/* Cronograma de Cuotas */}
             <div className="glass-panel rounded-2xl overflow-hidden mt-8">

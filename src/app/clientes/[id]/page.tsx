@@ -340,7 +340,7 @@ export default async function ClientDossierPage({ params }: { params: Promise<{ 
                                 </div>
 
                                 <div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <span className="text-xs font-bold text-white font-mono">
                                       Crédito #{loan.id.slice(0, 8).toUpperCase()}
                                     </span>
@@ -353,6 +353,15 @@ export default async function ClientDossierPage({ params }: { params: Promise<{ 
                                     }`}>
                                       {loan.status}
                                     </span>
+                                    {loan.promissoryNoteUrl ? (
+                                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 inline-flex items-center gap-1" title="Pagaré firmado custodiado">
+                                        <FileText className="h-3 w-3" /> Pagaré Firmado
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] font-normal px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-400/80 border-amber-500/20 inline-flex items-center gap-1" title="Pendiente por subir pagaré">
+                                        <FileText className="h-3 w-3 opacity-60" /> Sin Pagaré
+                                      </span>
+                                    )}
                                   </div>
                                   <p className="text-[11px] text-muted-foreground">
                                     Iniciado el {new Date(loan.startDate).toLocaleDateString('es-CO')} • Frecuencia {loan.interestType}

@@ -78,6 +78,10 @@ model Loan {
   payments         Payment[]
   referredByInvestorId String? // ID of the investor who referred this loan
   refinancedFromId String? // ID del préstamo original si fue refinanciado
+  
+  promissoryNoteUrl        String?   @db.Text // Documento firmado (PDF o imagen en base64)
+  promissoryNoteName       String?   // Nombre original del archivo subido
+  promissoryNoteUploadedAt DateTime? // Fecha y hora de custodia digital
 
   @@index([clientId])
   @@index([status])
