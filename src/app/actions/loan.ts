@@ -5,7 +5,7 @@ import { addDays, addWeeks, addMonths } from "date-fns"
 import { revalidatePath } from "next/cache"
 import { getSession } from "@/lib/session"
 import { generateSecretaryCommissionExpense } from "./payment"
-import { getSecretaryCommissionSettings } from "./settings"
+import { getSecretaryCommissionSettings, getCompanyCommissionSettings } from "./settings"
 import { notifyLoanCreated, notifyLoanRefinanced, notifyLoanDefaulted, notifyPrincipalPayment } from "@/lib/telegram"
 
 export async function getLoans(month?: number, year?: number) {
@@ -132,6 +132,8 @@ export async function createLoan(data: any) {
       interestType, // "MONTHLY", "WEEKLY", "BIWEEKLY", "DAILY"
       secretaryCommission,
       secretaryCommissionType,
+      companyCommission,
+      companyCommissionType,
       upfrontFee, // Add upfrontFee
       startDate,
       numberOfInstallments,
@@ -140,7 +142,7 @@ export async function createLoan(data: any) {
       refinancedFromId
     } = data
 
-    // Verificar sesión y cargar comisión por defecto si aplica
+    // Verificar sesión y cargar comisión de secretaría y empresa por defecto si aplica
     const session = await getSession()
     let finalSecComm = typeof secretaryCommission === "number" ? secretaryCommission : parseFloat(secretaryCommission) || 0
     let finalSecCommType = secretaryCommissionType || "PERCENTAGE_INTEREST"
@@ -152,6 +154,20 @@ export async function createLoan(data: any) {
         finalSecCommType = defaultComm.commissionType
         if (finalSecCommType === "FIXED_AMOUNT") {
           finalSecComm = Math.round(finalSecComm * 100)
+        }
+      }
+    }
+
+    let finalCompanyComm = typeof companyCommission === "number" ? companyCommission : parseFloat(companyCommission) || 0
+    let finalCompanyCommType = companyCommissionType || "PERCENTAGE_INTEREST"
+
+    if (finalCompanyComm === 0) {
+      const defaultCompanyComm = await getCompanyCommissionSettings()
+      if (defaultCompanyComm && defaultCompanyComm.commissionValue > 0) {
+        finalCompanyComm = defaultCompanyComm.commissionValue
+        finalCompanyCommType = defaultCompanyComm.commissionType
+        if (finalCompanyCommType === "FIXED_AMOUNT") {
+          finalCompanyComm = Math.round(finalCompanyComm * 100)
         }
       }
     }
@@ -247,6 +263,8 @@ export async function createLoan(data: any) {
           interestAmount: interestAmount || null,
           secretaryCommission: finalSecComm,
           secretaryCommissionType: finalSecCommType as any,
+          companyCommission: finalCompanyComm,
+          companyCommissionType: finalCompanyCommType as any,
           upfrontFee: upfrontFee || 0,
           startDate: new Date(startDate),
           endDate,
@@ -591,6 +609,8 @@ export async function updateLoan(loanId: string, data: any) {
       interestType,
       secretaryCommission,
       secretaryCommissionType,
+      companyCommission,
+      companyCommissionType,
       upfrontFee,
       startDate,
       numberOfInstallments,
@@ -710,6 +730,8 @@ export async function updateLoan(loanId: string, data: any) {
           interestAmount: interestAmount || null,
           secretaryCommission: secretaryCommission || 0,
           secretaryCommissionType: secretaryCommissionType as any,
+          companyCommission: companyCommission || 0,
+          companyCommissionType: companyCommissionType as any,
           upfrontFee: upfrontFee || 0,
           startDate: new Date(startDate),
           endDate,

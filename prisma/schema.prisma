@@ -58,6 +58,8 @@ model Loan {
   interestAmount   Int?      // Si se definió por monto fijo en vez de %
   secretaryCommission Float  @default(0) // Valor numérico de la comisión
   secretaryCommissionType String @default("PERCENTAGE_INTEREST") // FIXED_AMOUNT, PERCENTAGE_PRINCIPAL, PERCENTAGE_INTEREST
+  companyCommission   Float  @default(0) // Valor numérico o porcentaje de la comisión JyJ
+  companyCommissionType String @default("PERCENTAGE_INTEREST") // FIXED_AMOUNT, PERCENTAGE_PRINCIPAL, PERCENTAGE_INTEREST
   upfrontFee       Int       @default(0) // Cobro único inicial (ej: seguro + 4x1000)
   
   startDate        DateTime

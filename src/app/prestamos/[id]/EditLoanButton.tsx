@@ -22,6 +22,8 @@ export function EditLoanButton({
     upfrontFee?: number | null
     secretaryCommission?: number | null
     secretaryCommissionType?: string | null
+    companyCommission?: number | null
+    companyCommissionType?: string | null
     startDate: Date | string
     numberOfInstallments: number
     investors?: { investorId: string, participationPercentage: number }[]
@@ -46,8 +48,10 @@ export function EditLoanButton({
     new Date(loan.startDate).toISOString().split("T")[0]
   )
   const [upfrontFee, setUpfrontFee] = useState(((loan.upfrontFee || 0) / 100).toString())
-  const [secretaryCommission, setSecretaryCommission] = useState(((loan.secretaryCommission || 0) / 100).toString())
-  const [secretaryCommissionType, setSecretaryCommissionType] = useState(loan.secretaryCommissionType || "FIXED_PER_INSTALLMENT")
+  const [secretaryCommission, setSecretaryCommission] = useState((loan.secretaryCommission || 0).toString())
+  const [secretaryCommissionType, setSecretaryCommissionType] = useState(loan.secretaryCommissionType || "PERCENTAGE_INTEREST")
+  const [companyCommission, setCompanyCommission] = useState((loan.companyCommission || 0).toString())
+  const [companyCommissionType, setCompanyCommissionType] = useState(loan.companyCommissionType || "PERCENTAGE_INTEREST")
   const [referredByInvestorId, setReferredByInvestorId] = useState(loan.referredByInvestorId || "")
 
   const initialInvestors = loan.investors && loan.investors.length > 0
@@ -139,13 +143,25 @@ export function EditLoanButton({
       }
     })
 
+    let secComm = parseFloat(secretaryCommission) || 0
+    if (secretaryCommissionType === "FIXED_AMOUNT") {
+      secComm = Math.round(secComm * 100)
+    }
+
+    let compComm = parseFloat(companyCommission) || 0
+    if (companyCommissionType === "FIXED_AMOUNT") {
+      compComm = Math.round(compComm * 100)
+    }
+
     const data = {
       principalAmount: principal,
       interestRate,
       interestAmount: interestAmountVal,
       upfrontFee: Math.round((parseFloat(upfrontFee) || 0) * 100),
-      secretaryCommission: Math.round((parseFloat(secretaryCommission) || 0) * 100),
+      secretaryCommission: secComm,
       secretaryCommissionType,
+      companyCommission: compComm,
+      companyCommissionType,
       interestType,
       startDate,
       numberOfInstallments: parseInt(numberOfInstallments),
@@ -212,22 +228,46 @@ export function EditLoanButton({
               </div>
 
               {/* Cobros Adicionales & Comisiones */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-muted-foreground">Cobro Único Inicial $</label>
+                  <label className="text-xs font-semibold text-muted-foreground">Cobro Inicial ($)</label>
                   <CurrencyInput 
                     value={upfrontFee}
                     onChange={(val) => setUpfrontFee(val)}
-                    className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500 transition-colors" 
+                    className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500 transition-colors text-xs font-mono" 
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-muted-foreground">Comisión Secretaria $</label>
-                  <CurrencyInput 
-                    value={secretaryCommission}
-                    onChange={(val) => setSecretaryCommission(val)}
-                    className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500 transition-colors" 
-                  />
+                  <label className="text-xs font-semibold text-emerald-400">Comisión Empresa JyJ</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={companyCommission}
+                      onChange={(e) => setCompanyCommission(e.target.value)}
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 transition-colors text-xs font-mono" 
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">
+                      {companyCommissionType === "FIXED_AMOUNT" ? "COP" : "%"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-blue-400">Comisión Secretaría</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={secretaryCommission}
+                      onChange={(e) => setSecretaryCommission(e.target.value)}
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors text-xs font-mono" 
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">
+                      {secretaryCommissionType === "FIXED_AMOUNT" ? "COP" : "%"}
+                    </span>
+                  </div>
                 </div>
               </div>
 

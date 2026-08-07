@@ -213,7 +213,19 @@ export async function processBatchInstallments(loanIds: string[]) {
           secCommAmount = Math.round(totalInterest * (installment.loan.secretaryCommission / 100))
         }
 
-        const jyjPlatformFee = Math.round(totalInterest * 0.20)
+        let jyjPlatformFee = 0
+        const compComm = installment.loan.companyCommission || 0
+        const compCommType = installment.loan.companyCommissionType || "PERCENTAGE_INTEREST"
+
+        if (compCommType === "FIXED_AMOUNT") {
+          jyjPlatformFee = Math.round(compComm / (installment.loan.numberOfInstallments || 1))
+        } else if (compCommType === "PERCENTAGE_PRINCIPAL") {
+          jyjPlatformFee = Math.round((installment.loan.principalAmount * (compComm / 100)) / (installment.loan.numberOfInstallments || 1))
+        } else {
+          // PERCENTAGE_INTEREST
+          jyjPlatformFee = Math.round(totalInterest * (compComm / 100))
+        }
+
         const referralFee = referredByInvestorName ? Math.round(totalInterest * 0.03) : 0
         const remainingInterest = Math.max(0, totalInterest - secCommAmount - jyjPlatformFee - referralFee)
 

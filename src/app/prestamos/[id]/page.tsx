@@ -110,6 +110,8 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                           upfrontFee: loan.upfrontFee,
                           secretaryCommission: loan.secretaryCommission,
                           secretaryCommissionType: loan.secretaryCommissionType,
+                          companyCommission: loan.companyCommission,
+                          companyCommissionType: loan.companyCommissionType,
                           startDate: loan.startDate,
                           numberOfInstallments: loan.numberOfInstallments,
                           investors: loan.investors,
@@ -232,6 +234,30 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                     <div>
                       <p className="text-xs text-muted-foreground">Cuotas (Fijas)</p>
                       <p className="text-white font-medium">{loan.numberOfInstallments} de ${(loan.installmentAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+
+                  {/* Resumen de Comisiones */}
+                  <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
+                      <p className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">Comisión JyJ</p>
+                      <p className="text-white font-bold font-mono mt-0.5">
+                        {loan.companyCommissionType === "FIXED_AMOUNT" 
+                          ? `$${((loan.companyCommission || 0) / 100).toLocaleString('es-CO')}` 
+                          : loan.companyCommissionType === "PERCENTAGE_PRINCIPAL"
+                          ? `${loan.companyCommission || 0}% Capital`
+                          : `${loan.companyCommission || 0}% Interés`}
+                      </p>
+                    </div>
+                    <div className="bg-blue-500/10 p-2.5 rounded-xl border border-blue-500/20">
+                      <p className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider">Comisión Secretaría</p>
+                      <p className="text-white font-bold font-mono mt-0.5">
+                        {loan.secretaryCommissionType === "FIXED_AMOUNT" 
+                          ? `$${((loan.secretaryCommission || 0) / 100).toLocaleString('es-CO')}` 
+                          : loan.secretaryCommissionType === "PERCENTAGE_PRINCIPAL"
+                          ? `${loan.secretaryCommission || 0}% Capital`
+                          : `${loan.secretaryCommission || 0}% Interés`}
+                      </p>
                     </div>
                   </div>
                 </div>

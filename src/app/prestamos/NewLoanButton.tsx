@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, X, Calculator, Trash2, Loader2, Sparkles, ShieldAlert } from "lucide-react"
+import { Plus, X, Calculator, Trash2, Loader2, Sparkles, ShieldAlert, Building2, User, ChevronDown, ChevronUp } from "lucide-react"
 import { createLoan } from "@/app/actions/loan"
 import { CurrencyInput } from "@/components/ui/CurrencyInput"
 import toast from "react-hot-toast"
@@ -21,8 +21,14 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
   const [interestCalculation, setInterestCalculation] = useState("AMOUNT")
   const [interestValue, setInterestValue] = useState("")
   const [upfrontFee, setUpfrontFee] = useState("0")
+  
+  // Commissions
+  const [showCommissions, setShowCommissions] = useState(false)
+  const [companyCommissionType, setCompanyCommissionType] = useState("PERCENTAGE_INTEREST")
+  const [companyCommission, setCompanyCommission] = useState("0")
   const [secretaryCommissionType, setSecretaryCommissionType] = useState("PERCENTAGE_INTEREST")
   const [secretaryCommission, setSecretaryCommission] = useState("0")
+
   const [numberOfInstallments, setNumberOfInstallments] = useState("1")
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0])
 
@@ -40,7 +46,13 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
   const remainingOwnPercentage = Math.max(0, 100 - currentTotalPercentage)
 
   // Preview State
-  const [preview, setPreview] = useState<{installmentAmount: number, totalInterest: number} | null>(null)
+  const [preview, setPreview] = useState<{
+    installmentAmount: number
+    totalInterest: number
+    companyCommissionEstimated: number
+    secretaryCommissionEstimated: number
+    investorEarningsEstimated: number
+  } | null>(null)
 
   const handleCalculate = () => {
     const principal = parseFloat(principalAmount)
@@ -57,7 +69,42 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
     }
 
     const installmentAmount = (principal / installments) + (totalInterest / installments)
-    setPreview({ installmentAmount, totalInterest })
+
+    // Estimate Company Commission (JyJ)
+    let compCommEst = 0
+    const compVal = parseFloat(companyCommission) || 0
+    if (companyCommissionType === "FIXED_AMOUNT") {
+      compCommEst = compVal
+    } else if (companyCommissionType === "PERCENTAGE_PRINCIPAL") {
+      compCommEst = principal * (compVal / 100)
+    } else {
+      // PERCENTAGE_INTEREST
+      compCommEst = totalInterest * (compVal / 100)
+    }
+
+    // Estimate Secretary Commission
+    let secCommEst = 0
+    const secVal = parseFloat(secretaryCommission) || 0
+    if (secretaryCommissionType === "FIXED_AMOUNT") {
+      secCommEst = secVal
+    } else if (secretaryCommissionType === "PERCENTAGE_PRINCIPAL") {
+      secCommEst = principal * (secVal / 100)
+    } else {
+      secCommEst = totalInterest * (secVal / 100)
+    }
+
+    // Estimated Investor portion of interest (after company commission if applicable)
+    const investorSharePct = totalPrincipalNum > 0 ? (currentTotalInvestorAmount / totalPrincipalNum) : 0
+    const investorGrossInterest = totalInterest * investorSharePct
+    const investorNetInterest = Math.max(0, investorGrossInterest - (compCommEst * investorSharePct))
+
+    setPreview({ 
+      installmentAmount, 
+      totalInterest,
+      companyCommissionEstimated: compCommEst,
+      secretaryCommissionEstimated: secCommEst,
+      investorEarningsEstimated: investorNetInterest
+    })
   }
 
   const addInvestor = () => {
@@ -125,6 +172,11 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
       secComm = Math.round(secComm * 100)
     }
 
+    let compComm = parseFloat(companyCommission) || 0
+    if (companyCommissionType === "FIXED_AMOUNT") {
+      compComm = Math.round(compComm * 100)
+    }
+
     const data = {
       clientId,
       principalAmount: principal,
@@ -132,6 +184,8 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
       interestAmount: interestAmountVal,
       secretaryCommission: secComm,
       secretaryCommissionType,
+      companyCommission: compComm,
+      companyCommissionType,
       upfrontFee: Math.round((parseFloat(upfrontFee) || 0) * 100),
       interestType,
       startDate,
@@ -177,7 +231,7 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-white tracking-tight">Emisión de Préstamo</h2>
-                  <p className="text-[11px] text-muted-foreground">Configura las condiciones financieras del nuevo crédito.</p>
+                  <p className="text-[11px] text-muted-foreground">Configura las condiciones financieras y comisiones del crédito.</p>
                 </div>
               </div>
               <button 
@@ -218,24 +272,29 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
                     <option value="" disabled className="bg-[#0D1320] text-muted-foreground">Seleccione un cliente</option>
                     {clients.map(c => (
                       <option key={c.id} value={c.id} className="bg-[#0D1320] text-white" disabled={c.isBlacklisted}>
-                        {c.firstName} {c.lastName} ({c.idDocument}) {c.isBlacklisted ? " - [LISTA NEGRA]" : ""}
+                        {c.firstName} {c.lastName} ({c.idDocument}) {c.isBlacklisted ? "⚠️ LISTA NEGRA" : ""}
                       </option>
                     ))}
                   </select>
                 </div>
+                
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Capital a Prestar ($) *</label>
-                  <CurrencyInput 
-                    required 
-                    value={principalAmount}
-                    onChange={(val) => { setPrincipalAmount(val); setPreview(null); }}
-                    className="h-10 bg-black/40 border border-white/10 rounded-xl px-3.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500 transition-colors" 
-                  />
+                  <label className="text-xs font-semibold text-muted-foreground">Monto del Préstamo (Capital) *</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">$</span>
+                    <CurrencyInput 
+                      required 
+                      value={principalAmount} 
+                      onChange={(val) => { setPrincipalAmount(val); setPreview(null); }}
+                      placeholder="0"
+                      className="h-10 bg-black/40 border border-white/10 rounded-xl pl-8 pr-3.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Sección 2: Condiciones de Interés */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+              {/* Sección 2: Frecuencia y Rendimiento */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-semibold text-muted-foreground">Frecuencia de Pago</label>
                   <select 
@@ -321,6 +380,85 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
                 </div>
               </div>
 
+              {/* Desplegable de Comisiones Personalizadas */}
+              <div className="border border-white/[0.06] rounded-2xl overflow-hidden bg-white/[0.01]">
+                <button
+                  type="button"
+                  onClick={() => setShowCommissions(!showCommissions)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold text-muted-foreground hover:text-white transition-colors bg-white/[0.02]"
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-emerald-400" />
+                    <span>Personalizar Comisiones (Empresa JyJ y Secretaría)</span>
+                  </div>
+                  {showCommissions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+
+                {showCommissions && (
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-white/[0.06] animate-in fade-in duration-150">
+                    {/* Comisión JyJ */}
+                    <div className="space-y-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                        <Building2 className="h-3.5 w-3.5" /> Comisión Empresa (JyJ)
+                      </div>
+                      <select
+                        value={companyCommissionType}
+                        onChange={e => { setCompanyCommissionType(e.target.value); setPreview(null); }}
+                        className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="PERCENTAGE_INTEREST" className="bg-[#0D1320]">% Sobre Interés Cobrado</option>
+                        <option value="PERCENTAGE_PRINCIPAL" className="bg-[#0D1320]">% Sobre Capital Prestado</option>
+                        <option value="FIXED_AMOUNT" className="bg-[#0D1320]">$ Monto Fijo</option>
+                      </select>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={companyCommission}
+                          onChange={e => { setCompanyCommission(e.target.value); setPreview(null); }}
+                          placeholder="0 = Usa regla por defecto"
+                          className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white font-mono focus:outline-none focus:border-emerald-500"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">
+                          {companyCommissionType === "FIXED_AMOUNT" ? "COP" : "%"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Comisión Secretaría */}
+                    <div className="space-y-2 p-3 rounded-xl bg-blue-500/5 border border-blue-500/10">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-blue-400">
+                        <User className="h-3.5 w-3.5" /> Comisión Secretaría
+                      </div>
+                      <select
+                        value={secretaryCommissionType}
+                        onChange={e => { setSecretaryCommissionType(e.target.value); setPreview(null); }}
+                        className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="PERCENTAGE_INTEREST" className="bg-[#0D1320]">% Sobre Interés Cobrado</option>
+                        <option value="PERCENTAGE_PRINCIPAL" className="bg-[#0D1320]">% Sobre Capital Prestado</option>
+                        <option value="FIXED_AMOUNT" className="bg-[#0D1320]">$ Monto Fijo</option>
+                      </select>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={secretaryCommission}
+                          onChange={e => { setSecretaryCommission(e.target.value); setPreview(null); }}
+                          placeholder="0 = Usa regla por defecto"
+                          className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white font-mono focus:outline-none focus:border-blue-500"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">
+                          {secretaryCommissionType === "FIXED_AMOUNT" ? "COP" : "%"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Simulador */}
               <div className="flex flex-col gap-2 pt-1">
                 <button 
@@ -329,17 +467,36 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
                   className="h-10 w-full flex items-center justify-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-white px-4 rounded-xl text-xs font-semibold transition-all active:scale-98"
                 >
                   <Calculator className="h-3.5 w-3.5 text-blue-400" />
-                  Simular Plan de Amortización
+                  Simular Plan y Liquidación
                 </button>
                 {preview && (
-                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 flex justify-between items-center text-xs animate-in fade-in duration-200">
-                    <div>
-                      <span className="text-muted-foreground block text-[11px]">Interés Estimado Total:</span>
-                      <span className="text-white font-bold font-mono text-sm">${preview.totalInterest.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                  <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-3 animate-in fade-in duration-200">
+                    <div className="flex justify-between items-center pb-2 border-b border-white/[0.06]">
+                      <div>
+                        <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wider">Interés Total Estimado</span>
+                        <span className="text-white font-bold font-mono text-base">${preview.totalInterest.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-blue-400 block text-[10px] uppercase font-bold tracking-wider">Valor Cuota Fija</span>
+                        <span className="text-blue-400 text-lg font-extrabold font-mono">${preview.installmentAmount.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-blue-400 block text-[11px] font-semibold">Valor Cuota Fija:</span>
-                      <span className="text-blue-400 text-lg font-extrabold font-mono">${preview.installmentAmount.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-1 font-mono">
+                      <div className="bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20">
+                        <span className="text-emerald-400 block text-[10px] font-semibold">Comisión JyJ Est.:</span>
+                        <span className="text-white font-bold">${preview.companyCommissionEstimated.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      <div className="bg-blue-500/10 p-2 rounded-xl border border-blue-500/20">
+                        <span className="text-blue-400 block text-[10px] font-semibold">Comisión Secretaría:</span>
+                        <span className="text-white font-bold">${preview.secretaryCommissionEstimated.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                      </div>
+                      {selectedInvestors.length > 0 && (
+                        <div className="bg-purple-500/10 p-2 rounded-xl border border-purple-500/20 col-span-2 sm:col-span-1">
+                          <span className="text-purple-400 block text-[10px] font-semibold">Rend. Inversionistas:</span>
+                          <span className="text-white font-bold">${preview.investorEarningsEstimated.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

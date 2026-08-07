@@ -1,7 +1,7 @@
 import { SidebarServer as Sidebar } from "@/components/layout/SidebarServer"
 import { Header } from "@/components/layout/Header"
 import { getUsers, deleteUser } from "@/app/actions/user"
-import { getTelegramSettings, getSecretaryCommissionSettings } from "@/app/actions/settings"
+import { getTelegramSettings, getSecretaryCommissionSettings, getCompanyCommissionSettings } from "@/app/actions/settings"
 import { Trash2, Shield, User as UserIcon, CheckCircle2 } from "lucide-react"
 import { NewUserButton } from "./NewUserButton"
 import { EditUserButton } from "./EditUserButton"
@@ -11,7 +11,8 @@ import { CommissionSettings } from "./CommissionSettings"
 export default async function ConfiguracionPage() {
   const users = await getUsers()
   const telegramSettings = await getTelegramSettings()
-  const commissionSettings = await getSecretaryCommissionSettings()
+  const secretaryCommissionSettings = await getSecretaryCommissionSettings()
+  const companyCommissionSettings = await getCompanyCommissionSettings()
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#090D16]">
@@ -38,12 +39,15 @@ export default async function ConfiguracionPage() {
                 Configuración y Accesos del Sistema
               </h1>
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                Administración de credenciales de colaboradores, reglas de comisión automatizadas e integraciones.
+                Administración de credenciales de colaboradores, reglas de comisión de JyJ y secretaría e integraciones.
               </p>
             </div>
 
-            {/* Regla de Comisión por Defecto para Secretaría */}
-            <CommissionSettings initialSettings={commissionSettings} />
+            {/* Reglas de Comisión por Defecto (Empresa JyJ y Secretaría) */}
+            <CommissionSettings 
+              secretarySettings={secretaryCommissionSettings} 
+              companySettings={companyCommissionSettings} 
+            />
 
             {/* Gestión de Usuarios y Roles */}
             <div className="space-y-4">
