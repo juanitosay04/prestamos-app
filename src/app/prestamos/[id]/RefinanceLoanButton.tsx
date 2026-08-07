@@ -44,12 +44,20 @@ export function RefinanceLoanButton({
   const [upfrontFee, setUpfrontFee] = useState("0")
   
   const initialInvestors = currentInvestors && currentInvestors.length > 0
-    ? currentInvestors.map(i => ({ investorId: i.investorId, percentage: i.participationPercentage.toString() }))
+    ? currentInvestors.map(i => {
+        const amountPesos = ((currentPrincipal / 100) * (i.participationPercentage / 100)).toString()
+        return { investorId: i.investorId, amount: amountPesos }
+      })
     : []
     
-  const [selectedInvestors, setSelectedInvestors] = useState<{investorId: string, percentage: string}[]>(initialInvestors)
+  const [selectedInvestors, setSelectedInvestors] = useState<{investorId: string, amount: string}[]>(initialInvestors)
 
-  const currentTotalPercentage = selectedInvestors.reduce((sum, inv) => sum + (parseFloat(inv.percentage) || 0), 0)
+  const totalPrincipalNum = parseFloat(principalAmount) || 0
+  const currentTotalInvestorAmount = selectedInvestors.reduce((sum, inv) => sum + (parseFloat(inv.amount) || 0), 0)
+  const currentTotalPercentage = totalPrincipalNum > 0 ? (currentTotalInvestorAmount / totalPrincipalNum) * 100 : 0
+  const remainingOwnFunding = Math.max(0, totalPrincipalNum - currentTotalInvestorAmount)
+  const remainingOwnPercentage = Math.max(0, 100 - currentTotalPercentage)
+
   const [preview, setPreview] = useState<{installmentAmount: number, totalInterest: number} | null>(null)
 
   const handleCalculate = () => {
@@ -72,7 +80,9 @@ export function RefinanceLoanButton({
 
   const addInvestor = () => {
     if (availableInvestors.length > 0) {
-      setSelectedInvestors([...selectedInvestors, { investorId: availableInvestors[0].id, percentage: "100" }])
+      const remaining = Math.max(0, totalPrincipalNum - currentTotalInvestorAmount)
+      const suggested = remaining > 0 ? remaining.toString() : (totalPrincipalNum > 0 ? totalPrincipalNum.toString() : "")
+      setSelectedInvestors([...selectedInvestors, { investorId: availableInvestors[0].id, amount: suggested }])
     }
   }
 
@@ -98,8 +108,8 @@ export function RefinanceLoanButton({
     setLoading(true)
     setError("")
 
-    if (currentTotalPercentage > 100) {
-      setError(`El total asignado a inversionistas externos no puede superar el 100% (Actual: ${currentTotalPercentage}%)`)
+    if (totalPrincipalNum > 0 && currentTotalInvestorAmount > totalPrincipalNum) {
+      setError(`El total asignado a inversionistas ($${currentTotalInvestorAmount.toLocaleString("es-CO")}) no puede superar el monto del préstamo ($${totalPrincipalNum.toLocaleString("es-CO")})`)
       setLoading(false)
       return
     }
@@ -117,11 +127,13 @@ export function RefinanceLoanButton({
     }
 
     const formattedInvestors = selectedInvestors.map(inv => {
-      const p = parseFloat(inv.percentage)
+      const invAmountInPesos = parseFloat(inv.amount) || 0
+      const invAmountInCents = Math.round(invAmountInPesos * 100)
+      const p = principal > 0 ? (invAmountInCents / principal) * 100 : 0
       return {
         investorId: inv.investorId,
-        participationPercentage: p,
-        investedAmount: Math.round(principal * (p / 100))
+        participationPercentage: parseFloat(p.toFixed(2)),
+        investedAmount: invAmountInCents
       }
     })
 
@@ -336,10 +348,10 @@ export function RefinanceLoanButton({
               <div className="border-t border-white/5 pt-4">
                 <div className="flex justify-between items-center mb-2">
                   <div>
-                    <label className="text-sm font-medium text-white block">Participación de Inversionistas</label>
-                    <span className="text-xs text-muted-foreground">Se heredan automáticamente los inversionistas de la obligación original.</span>
+                    <label className="text-sm font-medium text-white block">Aportes de Inversionistas</label>
+                    <span className="text-[11px] text-muted-foreground">Define el valor monetario aportado por cada socio para fondear la refinanciación.</span>
                   </div>
-                  {availableInvestors.length > 0 && currentTotalPercentage < 100 && (
+                  {availableInvestors.length > 0 && (
                     <button 
                       type="button" 
                       onClick={addInvestor}
@@ -350,36 +362,50 @@ export function RefinanceLoanButton({
                   )}
                 </div>
 
-                {selectedInvestors.map((inv, idx) => (
-                  <div key={idx} className="flex gap-2 items-center mb-2">
-                    <select
-                      value={inv.investorId}
-                      onChange={e => updateInvestor(idx, "investorId", e.target.value)}
-                      className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-                    >
-                      {availableInvestors.map(ai => (
-                        <option key={ai.id} value={ai.id} className="bg-background">{ai.name}</option>
-                      ))}
-                    </select>
-                    <div className="w-24 flex items-center">
-                      <input 
-                        type="number" 
-                        value={inv.percentage} 
-                        onChange={e => updateInvestor(idx, "percentage", e.target.value)}
-                        className="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-2 text-sm text-white"
-                        placeholder="%"
-                      />
-                      <span className="text-xs text-muted-foreground ml-1">%</span>
+                {selectedInvestors.map((inv, idx) => {
+                  const invAmountNum = parseFloat(inv.amount) || 0
+                  const invPct = totalPrincipalNum > 0 ? (invAmountNum / totalPrincipalNum) * 100 : 0
+
+                  return (
+                    <div key={idx} className="flex gap-2 items-center mb-2 bg-white/[0.02] p-2 rounded-xl border border-white/[0.04]">
+                      <select
+                        value={inv.investorId}
+                        onChange={e => updateInvestor(idx, "investorId", e.target.value)}
+                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                      >
+                        {availableInvestors.map(ai => (
+                          <option key={ai.id} value={ai.id} className="bg-background">{ai.name}</option>
+                        ))}
+                      </select>
+
+                      <div className="relative w-32">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">$</span>
+                        <CurrencyInput 
+                          value={inv.amount}
+                          onChange={val => updateInvestor(idx, "amount", val)}
+                          placeholder="Monto aporte"
+                          className="w-full bg-black/40 border border-white/10 rounded-lg pl-5 pr-2 py-2 text-xs text-white font-mono"
+                        />
+                      </div>
+
+                      <div className="px-2 py-1.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] font-mono font-bold whitespace-nowrap min-w-[50px] text-center">
+                        {invPct.toFixed(1)}%
+                      </div>
+
+                      <button type="button" onClick={() => removeInvestor(idx)} className="p-2 text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                    <button type="button" onClick={() => removeInvestor(idx)} className="p-2 text-muted-foreground hover:text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
                 
-                <div className="flex justify-between items-center text-xs text-muted-foreground mt-2">
-                  <span>Fondeo Propio JyJ: {Math.max(0, 100 - currentTotalPercentage)}%</span>
-                  <span>Total Inversionistas: {currentTotalPercentage}%</span>
+                <div className="bg-black/30 p-2.5 rounded-xl border border-white/[0.06] flex justify-between items-center text-xs font-mono mt-2">
+                  <span className="text-muted-foreground text-[11px]">
+                    Fondeo Propio: <strong className="text-white">${remainingOwnFunding.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</strong> ({remainingOwnPercentage.toFixed(1)}%)
+                  </span>
+                  <span className={`text-[11px] font-bold ${currentTotalInvestorAmount > totalPrincipalNum ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    Aporte Socios: ${currentTotalInvestorAmount.toLocaleString("es-CO", { maximumFractionDigits: 0 })} ({currentTotalPercentage.toFixed(1)}%)
+                  </span>
                 </div>
               </div>
 

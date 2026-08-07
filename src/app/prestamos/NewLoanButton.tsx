@@ -31,9 +31,13 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
   const [referredByInvestorId, setReferredByInvestorId] = useState("")
 
   // Investors State
-  const [selectedInvestors, setSelectedInvestors] = useState<{investorId: string, percentage: string}[]>([])
+  const [selectedInvestors, setSelectedInvestors] = useState<{investorId: string, amount: string}[]>([])
   
-  const currentTotalPercentage = selectedInvestors.reduce((sum, inv) => sum + (parseFloat(inv.percentage) || 0), 0)
+  const totalPrincipalNum = parseFloat(principalAmount) || 0
+  const currentTotalInvestorAmount = selectedInvestors.reduce((sum, inv) => sum + (parseFloat(inv.amount) || 0), 0)
+  const currentTotalPercentage = totalPrincipalNum > 0 ? (currentTotalInvestorAmount / totalPrincipalNum) * 100 : 0
+  const remainingOwnFunding = Math.max(0, totalPrincipalNum - currentTotalInvestorAmount)
+  const remainingOwnPercentage = Math.max(0, 100 - currentTotalPercentage)
 
   // Preview State
   const [preview, setPreview] = useState<{installmentAmount: number, totalInterest: number} | null>(null)
@@ -58,7 +62,9 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
 
   const addInvestor = () => {
     if (investors.length > 0) {
-      setSelectedInvestors([...selectedInvestors, { investorId: investors[0].id, percentage: "100" }])
+      const remaining = Math.max(0, totalPrincipalNum - currentTotalInvestorAmount)
+      const suggestedAmount = remaining > 0 ? remaining.toString() : (totalPrincipalNum > 0 ? totalPrincipalNum.toString() : "")
+      setSelectedInvestors([...selectedInvestors, { investorId: investors[0].id, amount: suggestedAmount }])
     }
   }
 
@@ -85,8 +91,8 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
       return
     }
 
-    if (currentTotalPercentage > 100) {
-      setError(`El total asignado a inversionistas externos no puede superar el 100% (Actual: ${currentTotalPercentage}%)`)
+    if (totalPrincipalNum > 0 && currentTotalInvestorAmount > totalPrincipalNum) {
+      setError(`El total aportado por inversionistas ($${currentTotalInvestorAmount.toLocaleString("es-CO")}) no puede superar el monto del préstamo ($${totalPrincipalNum.toLocaleString("es-CO")})`)
       setLoading(false)
       return
     }
@@ -104,11 +110,13 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
     }
 
     const formattedInvestors = selectedInvestors.map(inv => {
-      const p = parseFloat(inv.percentage)
+      const invAmountInPesos = parseFloat(inv.amount) || 0
+      const invAmountInCents = Math.round(invAmountInPesos * 100)
+      const p = principal > 0 ? (invAmountInCents / principal) * 100 : 0
       return {
         investorId: inv.investorId,
-        participationPercentage: p,
-        investedAmount: Math.round(principal * (p / 100))
+        participationPercentage: parseFloat(p.toFixed(2)),
+        investedAmount: invAmountInCents
       }
     })
 
@@ -341,15 +349,16 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
               <div className="pt-4 border-t border-white/[0.06]">
                 <div className="flex justify-between items-center mb-3">
                   <div>
-                    <h3 className="text-xs font-bold text-white">Inversionistas y Fondeo</h3>
-                    <p className="text-[10px] text-muted-foreground">Distribución de capital entre socios.</p>
+                    <h3 className="text-xs font-bold text-white">Inversionistas y Fondeo Externo</h3>
+                    <p className="text-[10px] text-muted-foreground">Define el valor en dinero aportado por cada socio.</p>
                   </div>
                   <button 
                     type="button" 
                     onClick={addInvestor}
-                    className="text-xs bg-white/[0.05] hover:bg-white/[0.1] text-white px-3 py-1.5 rounded-xl transition-colors border border-white/[0.08] font-semibold"
+                    className="text-xs bg-white/[0.05] hover:bg-white/[0.1] text-white px-3 py-1.5 rounded-xl transition-colors border border-white/[0.08] font-semibold flex items-center gap-1.5"
                   >
-                    + Asignar Socio
+                    <Plus className="h-3.5 w-3.5 text-blue-400" />
+                    Asignar Socio
                   </button>
                 </div>
                 
@@ -359,37 +368,56 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
                   </p>
                 ) : (
                   <div className="space-y-2.5">
-                    {selectedInvestors.map((inv, idx) => (
-                      <div key={idx} className="flex items-center gap-2 bg-white/[0.02] p-2 rounded-xl border border-white/[0.04]">
-                        <select 
-                          value={inv.investorId}
-                          onChange={e => updateInvestor(idx, "investorId", e.target.value)}
-                          className="flex-1 h-9 bg-black/40 border border-white/10 rounded-lg px-3 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
-                        >
-                          {investors.map(i => <option key={i.id} value={i.id} className="bg-[#0D1320]">{i.name}</option>)}
-                        </select>
-                        <div className="flex items-center gap-1 w-28">
-                          <input 
-                            type="number" 
-                            step="0.01" 
-                            value={inv.percentage}
-                            onChange={e => updateInvestor(idx, "percentage", e.target.value)}
-                            placeholder="%"
-                            className="w-full h-9 bg-black/40 border border-white/10 rounded-lg px-3 text-white text-xs font-mono focus:outline-none focus:border-blue-500 transition-colors"
-                          />
-                          <span className="text-xs text-muted-foreground font-mono">%</span>
+                    {selectedInvestors.map((inv, idx) => {
+                      const invAmountNum = parseFloat(inv.amount) || 0
+                      const invPct = totalPrincipalNum > 0 ? (invAmountNum / totalPrincipalNum) * 100 : 0
+                      
+                      return (
+                        <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-white/[0.02] p-2.5 rounded-xl border border-white/[0.04]">
+                          <select 
+                            value={inv.investorId}
+                            onChange={e => updateInvestor(idx, "investorId", e.target.value)}
+                            className="flex-1 h-9 bg-black/40 border border-white/10 rounded-lg px-3 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
+                          >
+                            {investors.map(i => <option key={i.id} value={i.id} className="bg-[#0D1320]">{i.name}</option>)}
+                          </select>
+                          
+                          <div className="flex items-center gap-2">
+                            <div className="relative w-full sm:w-36">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">$</span>
+                              <CurrencyInput 
+                                value={inv.amount}
+                                onChange={val => updateInvestor(idx, "amount", val)}
+                                placeholder="Valor aporte"
+                                className="w-full h-9 bg-black/40 border border-white/10 rounded-lg pl-6 pr-2 text-white text-xs font-mono focus:outline-none focus:border-blue-500 transition-colors"
+                              />
+                            </div>
+
+                            <div className="px-2 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] font-mono font-bold whitespace-nowrap min-w-[54px] text-center" title="Participación en este préstamo">
+                              {invPct.toFixed(1)}%
+                            </div>
+
+                            <button 
+                              type="button" 
+                              onClick={() => removeInvestor(idx)} 
+                              className="p-2 text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors flex-shrink-0"
+                              title="Quitar socio"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <button 
-                          type="button" 
-                          onClick={() => removeInvestor(idx)} 
-                          className="p-2 text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                      )
+                    })}
+
+                    {/* Resumen de Fondeo */}
+                    <div className="bg-black/30 p-2.5 rounded-xl border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs font-mono">
+                      <div className="text-muted-foreground text-[11px]">
+                        Fondeo Propio: <strong className="text-white">${remainingOwnFunding.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</strong> ({remainingOwnPercentage.toFixed(1)}%)
                       </div>
-                    ))}
-                    <div className={`text-xs font-bold text-right pt-1 font-mono ${currentTotalPercentage > 100 ? 'text-rose-400' : 'text-muted-foreground'}`}>
-                      Fondeo Asignado: {currentTotalPercentage}% / 100%
+                      <div className={`text-[11px] font-bold ${currentTotalInvestorAmount > totalPrincipalNum ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        Aporte Inversionistas: ${currentTotalInvestorAmount.toLocaleString("es-CO", { maximumFractionDigits: 0 })} ({currentTotalPercentage.toFixed(1)}%)
+                      </div>
                     </div>
                   </div>
                 )}
