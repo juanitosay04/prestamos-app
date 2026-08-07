@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
-import { Check, Loader2, X, Printer, MessageCircle } from "lucide-react"
+import { Check, Loader2, X, Printer, MessageCircle, AlertTriangle, ArrowLeft, ShieldAlert } from "lucide-react"
 import { payInstallment } from "@/app/actions/payment"
 import { useReactToPrint } from "react-to-print"
 import { ReceiptTemplate, ReceiptData } from "@/components/ReceiptTemplate"
@@ -63,6 +63,7 @@ export function PayInstallmentButton({
   const remainingAmount = expectedAmount - amountPaid
   const [amountToPay, setAmountToPay] = useState((remainingAmount / 100).toString())
 
+  const [showMoraConfirmation, setShowMoraConfirmation] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null)
   
@@ -72,8 +73,7 @@ export function PayInstallmentButton({
     documentTitle: `Recibo_${installmentId}`
   })
 
-  const handlePay = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const executePayment = async () => {
     setLoading(true)
     setError("")
     
@@ -94,6 +94,7 @@ export function PayInstallmentButton({
     if (result.error) {
       setError(result.error)
       toast.error(result.error)
+      setShowMoraConfirmation(false)
     } else {
       toast.success("Pago registrado correctamente")
       const newOutstanding = totalOutstanding !== undefined ? Math.max(0, totalOutstanding - amountInCents) : undefined
@@ -113,12 +114,34 @@ export function PayInstallmentButton({
         remainingBalance: newOutstanding
       })
       setIsSuccess(true)
+      setShowMoraConfirmation(false)
     }
     setLoading(false)
   }
 
+  const handlePay = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+    
+    const parsedAmount = parseFloat(amountToPay) || 0
+    if (parsedAmount <= 0) {
+      setError("El monto a abonar debe ser mayor a 0")
+      return
+    }
+
+    const parsedMora = parseFloat(moraToPay) || 0
+    if (parsedMora > 0) {
+      // Doble confirmación si hay mora
+      setShowMoraConfirmation(true)
+      return
+    }
+
+    await executePayment()
+  }
+
   const handleClose = () => {
     setIsOpen(false)
+    setShowMoraConfirmation(false)
     if (isSuccess) {
       window.location.reload()
     }
@@ -173,7 +196,9 @@ export function PayInstallmentButton({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
           <div className="bg-card w-full max-w-md max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
             <div className="flex justify-between items-center p-6 border-b border-white/5">
-              <h2 className="text-xl font-bold text-white">{isSuccess ? "Pago Exitoso" : "Confirmar Pago"}</h2>
+              <h2 className="text-xl font-bold text-white">
+                {isSuccess ? "Pago Exitoso" : showMoraConfirmation ? "Confirmación de Mora" : "Confirmar Pago"}
+              </h2>
               <button onClick={handleClose} className="text-muted-foreground hover:text-white transition-colors">
                 <X className="h-5 w-5" />
               </button>
@@ -215,6 +240,75 @@ export function PayInstallmentButton({
                 </div>
 
                 <ReceiptTemplate ref={printRef} data={receiptData} />
+              </div>
+            ) : showMoraConfirmation ? (
+              <div className="p-6 flex flex-col gap-5 overflow-y-auto">
+                <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-300">
+                  <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 flex-shrink-0">
+                    <AlertTriangle className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-white">Doble Validación: Cobro de Mora</h3>
+                    <p className="text-xs text-amber-300/80 mt-0.5">
+                      Has ingresado un valor de recargo por mora para esta cuota. Por favor verifica que el monto sea correcto.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 bg-white/[0.03] p-4 rounded-xl border border-white/[0.08] text-xs">
+                  <div className="flex justify-between items-center pb-2 border-b border-white/[0.06]">
+                    <span className="text-muted-foreground">Cliente:</span>
+                    <span className="font-bold text-white">{clientName}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-white/[0.06]">
+                    <span className="text-muted-foreground">Documento:</span>
+                    <span className="font-mono text-white">{idDocument}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-white/[0.06]">
+                    <span className="text-muted-foreground">Cuota:</span>
+                    <span className="font-semibold text-white">#{installmentNumber} de {totalInstallments || 1}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-white/[0.06]">
+                    <span className="text-muted-foreground">Abono a Cuota:</span>
+                    <span className="font-bold text-emerald-400 font-mono">
+                      ${(parseFloat(amountToPay) || 0).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-white/[0.06] bg-destructive/10 p-2.5 rounded-lg border border-destructive/20">
+                    <span className="font-semibold text-destructive flex items-center gap-1.5">
+                      <ShieldAlert className="h-4 w-4" /> Recargo por Mora:
+                    </span>
+                    <span className="font-bold text-destructive font-mono text-sm">
+                      +${(parseFloat(moraToPay) || 0).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 font-bold text-sm">
+                    <span className="text-white">Total a Recaudar:</span>
+                    <span className="text-emerald-400 font-mono text-base font-extrabold">
+                      ${((parseFloat(amountToPay) || 0) + (parseFloat(moraToPay) || 0)).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-end gap-2.5 pt-2">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowMoraConfirmation(false)}
+                    disabled={loading}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-white/[0.06] hover:bg-white/[0.12] transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" /> Modificar Mora
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={executePayment}
+                    disabled={loading}
+                    className="w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-lg shadow-amber-600/25 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    {loading ? "Procesando..." : "Sí, Confirmar y Cobrar"}
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handlePay} className="p-6 flex flex-col gap-4 overflow-y-auto">
