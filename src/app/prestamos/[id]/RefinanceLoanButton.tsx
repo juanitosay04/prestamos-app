@@ -32,7 +32,8 @@ export function RefinanceLoanButton({
   const [error, setError] = useState("")
 
   const effectivePendingCapital = outstandingPrincipal !== undefined ? outstandingPrincipal : currentPrincipal
-  const initialPrincipalValue = Math.round((effectivePendingCapital > 0 ? effectivePendingCapital : currentPrincipal) / 100).toString()
+  const pendingPesos = Math.round((effectivePendingCapital > 0 ? effectivePendingCapital : currentPrincipal) / 100)
+  const initialPrincipalValue = pendingPesos.toString()
 
   // Form State pre-filled with outstanding balance
   const [principalAmount, setPrincipalAmount] = useState(initialPrincipalValue)
@@ -45,7 +46,7 @@ export function RefinanceLoanButton({
   
   const initialInvestors = currentInvestors && currentInvestors.length > 0
     ? currentInvestors.map(i => {
-        const amountPesos = Math.round((currentPrincipal / 100) * (i.participationPercentage / 100)).toString()
+        const amountPesos = Math.round(pendingPesos * (i.participationPercentage / 100)).toString()
         return { investorId: i.investorId, amount: amountPesos }
       })
     : []
@@ -99,8 +100,28 @@ export function RefinanceLoanButton({
   }
 
   const useExactPendingCapital = () => {
-    setPrincipalAmount(Math.round(effectivePendingCapital / 100).toString())
+    const exactPesos = Math.round(effectivePendingCapital / 100)
+    setPrincipalAmount(exactPesos.toString())
+    if (currentInvestors && currentInvestors.length > 0) {
+      setSelectedInvestors(
+        currentInvestors.map(i => ({
+          investorId: i.investorId,
+          amount: Math.round(exactPesos * (i.participationPercentage / 100)).toString()
+        }))
+      )
+    }
     setPreview(null)
+  }
+
+  const autoDistributeOriginalPercentages = () => {
+    if (currentInvestors && currentInvestors.length > 0 && totalPrincipalNum > 0) {
+      setSelectedInvestors(
+        currentInvestors.map(i => ({
+          investorId: i.investorId,
+          amount: Math.round(totalPrincipalNum * (i.participationPercentage / 100)).toString()
+        }))
+      )
+    }
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -346,37 +367,57 @@ export function RefinanceLoanButton({
 
               {/* Inversionistas / Fondeo Heredado */}
               <div className="border-t border-white/5 pt-4">
-                <div className="flex justify-between items-center mb-2">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
                   <div>
                     <label className="text-sm font-medium text-white block">Aportes de Inversionistas</label>
-                    <span className="text-[11px] text-muted-foreground">Define el valor monetario aportado por cada socio para fondear la refinanciación.</span>
+                    <span className="text-[11px] text-muted-foreground">Define el valor aportado por cada socio para fondear el capital refinanciado.</span>
                   </div>
-                  {availableInvestors.length > 0 && (
-                    <button 
-                      type="button" 
-                      onClick={addInvestor}
-                      className="text-xs bg-white/5 hover:bg-white/10 text-white border border-white/10 px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                      + Añadir Inversionista
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {currentInvestors && currentInvestors.length > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={autoDistributeOriginalPercentages}
+                        className="text-xs bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 font-medium"
+                        title="Reajustar montos según los porcentajes originales del préstamo"
+                      >
+                        <RefreshCw className="h-3 w-3" /> Reajustar % Originales
+                      </button>
+                    )}
+                    {availableInvestors.length > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={addInvestor}
+                        className="text-xs bg-white/5 hover:bg-white/10 text-white border border-white/10 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        + Añadir Inversionista
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {selectedInvestors.map((inv, idx) => {
                   const invAmountNum = parseFloat(inv.amount) || 0
                   const invPct = totalPrincipalNum > 0 ? (invAmountNum / totalPrincipalNum) * 100 : 0
+                  const origInv = currentInvestors?.find(ci => ci.investorId === inv.investorId)
 
                   return (
                     <div key={idx} className="flex gap-2 items-center mb-2 bg-white/[0.02] p-2 rounded-xl border border-white/[0.04]">
-                      <select
-                        value={inv.investorId}
-                        onChange={e => updateInvestor(idx, "investorId", e.target.value)}
-                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
-                      >
-                        {availableInvestors.map(ai => (
-                          <option key={ai.id} value={ai.id} className="bg-background">{ai.name}</option>
-                        ))}
-                      </select>
+                      <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <select
+                          value={inv.investorId}
+                          onChange={e => updateInvestor(idx, "investorId", e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                        >
+                          {availableInvestors.map(ai => (
+                            <option key={ai.id} value={ai.id} className="bg-background">{ai.name}</option>
+                          ))}
+                        </select>
+                        {origInv && (
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap px-1.5 py-0.5 rounded bg-white/5 border border-white/5 font-mono">
+                            Orig: {origInv.participationPercentage}%
+                          </span>
+                        )}
+                      </div>
 
                       <div className="relative w-32">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">$</span>
