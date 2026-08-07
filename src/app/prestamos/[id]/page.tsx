@@ -42,6 +42,7 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
   const totalPaid = loan.installments.filter(i => i.status === "PAID").reduce((sum, curr) => sum + curr.expectedAmount, 0)
   const totalExpected = loan.installments.reduce((sum, curr) => sum + curr.expectedAmount, 0)
   const totalInterestEarned = loan.installments.reduce((sum, curr) => sum + curr.interestPart, 0)
+  const totalLateFees = loan.installments.reduce((sum, curr) => sum + (curr.lateFee || 0), 0)
   const progress = Math.round((totalPaid / totalExpected) * 100) || 0
 
   const outstandingPrincipal = loan.installments.filter(i => i.status === "PENDING").reduce((sum, curr) => sum + curr.principalPart, 0)
@@ -213,10 +214,17 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                 </div>
                 
                 <div className="border-t border-white/5 pt-6">
-                  <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2 mb-4">
-                    <DollarSign className="h-4 w-4" /> Resumen Financiero
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" /> Resumen Financiero
+                    </h3>
+                    {totalLateFees > 0 && (
+                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono">
+                        +${(totalLateFees / 100).toLocaleString('es-CO')} en moras
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div>
                       <p className="text-xs text-muted-foreground">Capital Original</p>
                       <p className="text-lg font-bold text-white">${(loan.principalAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
@@ -228,12 +236,24 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                       </p>
                     </div>
                     <div>
+                      <p className="text-xs text-muted-foreground">Moras Cobradas</p>
+                      <p className="text-lg font-bold text-rose-400 font-mono">
+                        ${(totalLateFees / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div>
                       <p className="text-xs text-muted-foreground">Frecuencia</p>
                       <p className="text-white font-medium">{loan.interestType}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Cuotas (Fijas)</p>
                       <p className="text-white font-medium">{loan.numberOfInstallments} de ${(loan.installmentAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total con Moras</p>
+                      <p className="text-white font-bold font-mono">
+                        ${((totalExpected + totalLateFees) / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
                     </div>
                   </div>
 
@@ -271,9 +291,16 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                   </h3>
                   <div className="mb-2 flex justify-between items-end">
                     <span className="text-3xl font-bold text-white">{progress}%</span>
-                    <span className="text-sm text-muted-foreground">
-                      ${(totalPaid / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${(totalExpected / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                    <div className="text-right">
+                      <span className="text-sm text-muted-foreground block">
+                        ${(totalPaid / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ${(totalExpected / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      {totalLateFees > 0 && (
+                        <span className="text-[10px] text-rose-400 font-mono">
+                          +${(totalLateFees / 100).toLocaleString('es-CO')} en moras cobradas
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="w-full bg-white/5 rounded-full h-3 overflow-hidden">
                     <div className="bg-primary h-3 rounded-full transition-all duration-1000" style={{ width: `${progress}%` }}></div>
@@ -377,6 +404,12 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                           </td>
                           <td className="px-6 py-4 text-white font-bold">
                             ${(inst.expectedAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {inst.lateFee > 0 && (
+                              <div className="text-xs text-rose-400 font-semibold mt-0.5 flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-rose-400 inline-block" />
+                                Mora: +${(inst.lateFee / 100).toLocaleString('es-CO')}
+                              </div>
+                            )}
                             {inst.status === "PARTIAL" && (
                               <div className="text-xs text-blue-400 font-normal mt-1">
                                 Resta: ${((inst.expectedAmount - inst.amountPaid) / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
