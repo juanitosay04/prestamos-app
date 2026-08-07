@@ -18,6 +18,7 @@ export function GlobalSearch() {
   const [isOpen, setIsOpen] = useState(false)
   
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -27,6 +28,17 @@ export function GlobalSearch() {
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
   useEffect(() => {
@@ -41,7 +53,7 @@ export function GlobalSearch() {
         setResults(null)
         setIsOpen(false)
       }
-    }, 400) // 400ms debounce
+    }, 300)
 
     return () => clearTimeout(delayDebounceFn)
   }, [query])
@@ -49,49 +61,60 @@ export function GlobalSearch() {
   const hasResults = results && (results.clients.length > 0 || results.loans.length > 0 || results.investors.length > 0)
 
   return (
-    <div className="relative w-96 hidden md:block" ref={dropdownRef}>
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <div className="relative w-full max-w-md hidden md:block" ref={dropdownRef}>
+      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70" />
       <input 
+        ref={inputRef}
         type="text" 
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => { if (hasResults) setIsOpen(true) }}
-        placeholder="Buscar clientes, préstamos..." 
-        className="w-full bg-white/5 border border-white/10 rounded-full pl-10 pr-10 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all text-white placeholder:text-muted-foreground"
+        placeholder="Buscar clientes, préstamos o inversionistas..." 
+        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pl-9 pr-14 py-2 text-xs focus:outline-none focus:border-blue-500/60 focus:bg-black/30 transition-all text-white placeholder:text-muted-foreground/60"
       />
       
-      {loading && (
-        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
-      )}
+      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
+        {loading ? (
+          <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
+        ) : (
+          <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[9px] font-mono text-muted-foreground bg-white/[0.06] border border-white/10 rounded">
+            ⌘K
+          </kbd>
+        )}
+      </div>
 
       {isOpen && results && (
-        <div className="absolute top-full mt-2 w-full bg-card border border-white/10 shadow-2xl rounded-2xl overflow-hidden z-50">
-          <div className="max-h-[400px] overflow-y-auto p-2 flex flex-col gap-1">
+        <div className="absolute top-full mt-2 w-full glass-panel-elevated border border-white/[0.1] shadow-2xl rounded-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="max-h-[380px] overflow-y-auto p-2 flex flex-col gap-1">
             
             {!hasResults && !loading && (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                No se encontraron resultados para "{query}"
+              <div className="p-4 text-center text-xs text-muted-foreground">
+                No se encontraron resultados para &quot;{query}&quot;
               </div>
             )}
 
             {results.clients.length > 0 && (
               <div className="mb-2">
-                <h4 className="text-xs font-bold text-muted-foreground uppercase px-2 mb-1">Clientes</h4>
+                <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2.5 py-1">
+                  Clientes
+                </h4>
                 {results.clients.map(client => (
                   <Link 
                     key={client.id}
-                    href="/clientes" // Todo: If we add client detail page, link to it
+                    href={`/clientes/${client.id}`}
                     onClick={() => setIsOpen(false)}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors group"
+                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] transition-colors group"
                   >
-                    <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center">
-                      <User className="h-4 w-4" />
+                    <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center font-bold text-xs">
+                      {client.firstName.charAt(0)}
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-white">{client.firstName} {client.lastName}</p>
-                      <p className="text-xs text-muted-foreground">ID: {client.idDocument}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors truncate">
+                        {client.firstName} {client.lastName}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground font-mono">CC: {client.idDocument}</p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </Link>
                 ))}
               </div>
@@ -99,22 +122,28 @@ export function GlobalSearch() {
 
             {results.loans.length > 0 && (
               <div className="mb-2">
-                <h4 className="text-xs font-bold text-muted-foreground uppercase px-2 mb-1">Préstamos</h4>
+                <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2.5 py-1">
+                  Préstamos
+                </h4>
                 {results.loans.map(loan => (
                   <Link 
                     key={loan.id}
                     href={`/prestamos/${loan.id}`}
                     onClick={() => setIsOpen(false)}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors group"
+                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] transition-colors group"
                   >
-                    <div className="h-8 w-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                      <Briefcase className="h-4 w-4" />
+                    <div className="h-7 w-7 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center">
+                      <Briefcase className="h-3.5 w-3.5" />
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-white">{loan.client.firstName} {loan.client.lastName}</p>
-                      <p className="text-xs text-muted-foreground">Préstamo: {loan.id.slice(0, 8)}...</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors truncate">
+                        {loan.client.firstName} {loan.client.lastName}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground font-mono">
+                        ${(loan.principalAmount / 100).toLocaleString('es-CO')} • ID: {loan.id.slice(0, 8).toUpperCase()}
+                      </p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </Link>
                 ))}
               </div>
@@ -122,22 +151,26 @@ export function GlobalSearch() {
 
             {results.investors.length > 0 && (
               <div>
-                <h4 className="text-xs font-bold text-muted-foreground uppercase px-2 mb-1">Inversionistas</h4>
+                <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2.5 py-1">
+                  Inversionistas
+                </h4>
                 {results.investors.map(investor => (
                   <Link 
                     key={investor.id}
                     href={`/inversionistas/${investor.id}`}
                     onClick={() => setIsOpen(false)}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors group"
+                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] transition-colors group"
                   >
-                    <div className="h-8 w-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
-                      <Wallet className="h-4 w-4" />
+                    <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+                      <Wallet className="h-3.5 w-3.5" />
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-white">{investor.name}</p>
-                      <p className="text-xs text-muted-foreground">{investor.email || investor.phone || "Sin contacto"}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors truncate">
+                        {investor.name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground font-mono truncate">{investor.email || investor.phone || "Sin contacto"}</p>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </Link>
                 ))}
               </div>

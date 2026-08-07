@@ -1,12 +1,13 @@
 import { SidebarServer as Sidebar } from "@/components/layout/SidebarServer"
 import { Header } from "@/components/layout/Header"
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts"
-import { Users, TrendingUp, AlertCircle, ArrowUpRight, ArrowDownRight, Download } from "lucide-react"
+import { Users, TrendingUp, AlertCircle, ArrowUpRight, ArrowDownRight, Download, Calendar, DollarSign, Wallet, ShieldAlert, ArrowRight } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { runMonthlyCloseCheck } from "@/app/actions/financialClose"
+import Link from "next/link"
 
 export default async function Dashboard() {
-  // Disparador de cierre mensual automático (no bloqueante / se corre en cada load del dashboard)
+  // Disparador de cierre mensual automático
   await runMonthlyCloseCheck()
   
   const activeLoans = await prisma.loan.findMany({
@@ -24,7 +25,7 @@ export default async function Dashboard() {
     totalCapital += loan.principalAmount
   })
 
-  // Calcular Dinero Perdido (Capital pendiente de préstamos en DEFAULTED)
+  // Dinero Perdido (Capital pendiente de préstamos en DEFAULTED)
   const defaultedLoans = await prisma.loan.findMany({
     where: { status: "DEFAULTED", deletedAt: null },
     include: { installments: { where: { status: "PENDING" } } }
@@ -80,7 +81,7 @@ export default async function Dashboard() {
       loan: { status: { not: "REFINANCED" }, deletedAt: null }
     },
     orderBy: { dueDate: "asc" },
-    take: 5,
+    take: 6,
     include: { loan: { include: { client: true } } }
   })
 
@@ -91,7 +92,7 @@ export default async function Dashboard() {
   
   const portfolioData = [
     { name: "Activos", value: activeLoans.length, color: "#3b82f6" },
-    { name: "En Mora", value: overdueLoans, color: "#f97316" },
+    { name: "En Mora", value: overdueLoans, color: "#f59e0b" },
     { name: "Pagados", value: paidLoans, color: "#10b981" },
     { name: "Perdidos", value: defaultedLoans.length, color: "#ef4444" },
   ]
@@ -104,7 +105,7 @@ export default async function Dashboard() {
     where: {
       loan: { deletedAt: null, status: { not: "REFINANCED" } },
       dueDate: {
-        gte: new Date(today.getFullYear(), today.getMonth(), 1), // Start of current month
+        gte: new Date(today.getFullYear(), today.getMonth(), 1),
         lte: sixMonthsFromNow
       }
     }
@@ -114,7 +115,6 @@ export default async function Dashboard() {
   const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
   const monthlyMap = new Map<string, { Capital: number, Ganancia: number }>()
 
-  // Initialize next 6 months
   for (let i = 0; i < 6; i++) {
     const d = new Date(today.getFullYear(), today.getMonth() + i, 1)
     const key = `${monthNames[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}`
@@ -126,10 +126,8 @@ export default async function Dashboard() {
     const key = `${monthNames[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}`
     if (monthlyMap.has(key)) {
       const current = monthlyMap.get(key)!
-      // Capital goes to Capital, interest goes to Ganancia
       current.Capital += inst.principalPart
       current.Ganancia += inst.interestPart
-      // Add late fee if paid
       if (inst.status === "PAID" && inst.lateFee) {
         current.Ganancia += inst.lateFee
       }
@@ -143,166 +141,236 @@ export default async function Dashboard() {
   }))
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-[#07090E]">
       <Sidebar />
       <div className="flex-1 flex flex-col relative overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-blue-600/10 blur-[100px] pointer-events-none" />
+        {/* Subtle executive ambient background glows */}
+        <div className="absolute top-[-15%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/5 blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-[-15%] right-[-10%] w-[45%] h-[45%] rounded-full bg-indigo-600/5 blur-[140px] pointer-events-none" />
         
         <Header />
         
-        <main className="flex-1 overflow-y-auto p-8 relative z-0">
-          <div className="max-w-6xl mx-auto space-y-8">
-            <div className="flex justify-between items-start">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-8 relative z-0">
+          <div className="max-w-7xl mx-auto space-y-8">
+            
+            {/* Header del Dashboard */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Visión General</h1>
-                <p className="text-muted-foreground">Bienvenido de nuevo, aquí tienes el resumen financiero de hoy.</p>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                  Visión General
+                </h1>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                  Resumen financiero, cartera activa y proyecciones de cobro en tiempo real.
+                </p>
               </div>
-              <a 
-                href="/api/export" 
-                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white border border-white/10 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
-              >
-                <Download className="h-4 w-4" />
-                Exportar Excel
-              </a>
+              
+              <div className="flex items-center gap-3">
+                <a 
+                  href="/api/export" 
+                  className="flex items-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/[0.08] px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-sm hover:border-white/20 active:scale-95"
+                >
+                  <Download className="h-4 w-4 text-blue-400" />
+                  Exportar a Excel
+                </a>
+                
+                <Link
+                  href="/prestamos/nuevo"
+                  className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+                >
+                  + Nuevo Préstamo
+                </Link>
+              </div>
             </div>
             
-            {/* Tarjetas de métricas principales */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Tarjetas de métricas principales (KPIs de Alta Gama) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
               
-              <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-primary/10 rounded-xl text-primary">
-                    <TrendingUp className="h-5 w-5" />
+              {/* Capital Prestado */}
+              <div className="glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Capital Prestado
+                  </span>
+                  <div className="p-2.5 bg-blue-500/10 rounded-xl text-blue-400 border border-blue-500/10">
+                    <TrendingUp className="h-4 w-4" />
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-3xl font-bold text-white mb-1">${(totalCapital / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}</h3>
-                  <p className="text-sm text-muted-foreground font-medium">Capital Prestado</p>
+                  <h3 className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight">
+                    ${(totalCapital / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                    <span className="text-blue-400 font-semibold">{activeLoans.length}</span> préstamos activos
+                  </div>
                 </div>
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </div>
 
-              <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400">
-                    <ArrowDownRight className="h-5 w-5" />
+              {/* Ingresos Proyectados Mes */}
+              <div className="glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Ingresos Proyectados
+                  </span>
+                  <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/10">
+                    <DollarSign className="h-4 w-4" />
                   </div>
-                  <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full">Este Mes</span>
                 </div>
                 <div>
-                  <h3 className="text-3xl font-bold text-white mb-1">${(monthlyExpectedIncome / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}</h3>
-                  <p className="text-sm text-muted-foreground font-medium">Ingresos Proyectados</p>
+                  <h3 className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono tracking-tight">
+                    ${(monthlyExpectedIncome / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-2 text-xs text-emerald-400/90 font-medium">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    Intereses y moras del mes
+                  </div>
                 </div>
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </div>
 
-              <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-destructive/10 rounded-xl text-destructive">
-                    <ArrowDownRight className="h-5 w-5" />
+              {/* Rentabilidad Neta */}
+              <div className="glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Utilidad Neta (Mes)
+                  </span>
+                  <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/10">
+                    <Wallet className="h-4 w-4" />
                   </div>
-                  <span className="text-xs font-bold text-destructive bg-destructive/10 px-2 py-1 rounded-full">Este Mes</span>
                 </div>
                 <div>
-                  <h3 className="text-3xl font-bold text-white mb-1">${(monthlyExpenses / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}</h3>
-                  <p className="text-sm text-muted-foreground font-medium">Gastos Operativos</p>
+                  <h3 className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight ${monthlyNetProfit >= 0 ? 'text-white' : 'text-rose-400'}`}>
+                    ${(monthlyNetProfit / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                    Menos ${(monthlyExpenses / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })} en gastos
+                  </div>
                 </div>
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-destructive to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </div>
 
-              <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400">
-                    <TrendingUp className="h-5 w-5" />
+              {/* Clientes en Mora */}
+              <div className="glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Créditos en Mora
+                  </span>
+                  <div className={`p-2.5 rounded-xl border ${overdueLoans > 0 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-white/5 text-muted-foreground border-white/5'}`}>
+                    <AlertCircle className="h-4 w-4" />
                   </div>
-                  <span className="text-xs font-bold text-purple-400 bg-purple-500/10 px-2 py-1 rounded-full">Este Mes</span>
                 </div>
                 <div>
-                  <h3 className="text-3xl font-bold text-white mb-1">${(monthlyNetProfit / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}</h3>
-                  <p className="text-sm text-muted-foreground font-medium">Rentabilidad Neta</p>
+                  <h3 className={`text-2xl sm:text-3xl font-extrabold font-mono tracking-tight ${overdueLoans > 0 ? 'text-amber-400' : 'text-white'}`}>
+                    {overdueLoans}
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                    {overdueLoans > 0 ? (
+                      <span className="text-amber-400/90 font-medium">Requieren gestión de cobro</span>
+                    ) : (
+                      <span className="text-emerald-400 font-medium">Al día</span>
+                    )}
+                  </div>
                 </div>
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-purple-400 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </div>
 
-              <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400">
-                    <Users className="h-5 w-5" />
+              {/* Capital Perdido (Castigado) - Si existe */}
+              {defaultedLoans.length > 0 && (
+                <div className="glass-panel glass-card-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between border-rose-500/20 bg-rose-950/10">
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-xs font-semibold text-rose-300 uppercase tracking-wider">
+                      Cartera Castigada
+                    </span>
+                    <div className="p-2.5 bg-rose-500/10 rounded-xl text-rose-400 border border-rose-500/20">
+                      <ShieldAlert className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-extrabold text-rose-400 font-mono tracking-tight">
+                      ${(totalLostCapital / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
+                    </h3>
+                    <p className="text-xs text-rose-400/80 mt-2 font-medium">
+                      {defaultedLoans.length} créditos en pérdida
+                    </p>
                   </div>
                 </div>
-                <div>
-                  <h3 className="text-3xl font-bold text-white mb-1">{activeLoans.length}</h3>
-                  <p className="text-sm text-muted-foreground font-medium">Préstamos Activos</p>
-                </div>
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </div>
-
-              <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-orange-500/10 rounded-xl text-orange-400">
-                    <AlertCircle className="h-5 w-5" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-3xl font-bold text-white mb-1">{overdueLoans}</h3>
-                  <p className="text-sm text-muted-foreground font-medium">Clientes en Mora</p>
-                </div>
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </div>
-
-              <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group border border-destructive/20 bg-destructive/5">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-destructive/20 rounded-xl text-destructive">
-                    <AlertCircle className="h-5 w-5" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-3xl font-bold text-destructive mb-1">${(totalLostCapital / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}</h3>
-                  <p className="text-sm text-destructive/80 font-medium">Capital Perdido (Histórico)</p>
-                </div>
-                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-destructive to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </div>
+              )}
             </div>
 
-            {/* Secciones Inferiores con Gráficas Reales */}
+            {/* Gráficos de Proyección y Distribución */}
             <DashboardCharts monthlyData={monthlyData} portfolioData={portfolioData} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-              
-              <div className="glass-panel rounded-2xl p-6 lg:col-span-3">
-                <h3 className="text-lg font-semibold text-white mb-6">Próximos Vencimientos</h3>
-                <div className="space-y-4">
-                  {upcomingInstallments.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No hay cobros pendientes.</p>
-                  ) : (
-                    upcomingInstallments.map((inst) => {
-                      const isOverdue = new Date(inst.dueDate) < new Date()
-                      return (
-                        <div key={inst.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
-                          <div className="flex items-center gap-3">
-                            <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold border ${isOverdue ? 'bg-destructive/10 text-destructive border-destructive/20' : 'bg-white/5 text-muted-foreground border-white/5'}`}>
-                              {inst.loan.client.firstName.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-white">{inst.loan.client.firstName} {inst.loan.client.lastName}</p>
-                              <p className={`text-xs ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-                                {new Date(inst.dueDate).toLocaleDateString()} (Cuota {inst.installmentNumber})
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-sm font-semibold text-primary">${(inst.expectedAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                      )
-                    })
-                  )}
+            {/* Próximos Vencimientos */}
+            <div className="glass-panel rounded-2xl p-6 border border-white/[0.08]">
+              <div className="flex items-center justify-between pb-5 border-b border-white/[0.06] mb-5">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-500/10 rounded-xl text-blue-400">
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Próximos Vencimientos de Cuotas</h3>
+                    <p className="text-xs text-muted-foreground">Cobros más cercanos programados en el calendario.</p>
+                  </div>
                 </div>
-                <button className="w-full mt-6 py-2.5 bg-white/5 hover:bg-white/10 text-white text-sm font-medium rounded-lg transition-colors border border-white/5">
-                  Ver todos los vencimientos
-                </button>
+                
+                <Link
+                  href="/prestamos"
+                  className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+                >
+                  Ver todos los préstamos <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {upcomingInstallments.length === 0 ? (
+                  <p className="text-xs text-muted-foreground col-span-full py-4 text-center">
+                    No hay cobros pendientes registrados.
+                  </p>
+                ) : (
+                  upcomingInstallments.map((inst) => {
+                    const isOverdue = new Date(inst.dueDate) < new Date()
+                    const clientName = `${inst.loan.client.firstName} ${inst.loan.client.lastName}`
+                    const amount = (inst.expectedAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 0 })
+                    
+                    return (
+                      <Link
+                        key={inst.id}
+                        href={`/prestamos/${inst.loanId}`}
+                        className="group p-3.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/[0.1] transition-all flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-xs font-extrabold border ${
+                            isOverdue 
+                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
+                              : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                          }`}>
+                            {inst.loan.client.firstName.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors line-clamp-1">
+                              {clientName}
+                            </p>
+                            <p className={`text-[11px] mt-0.5 ${isOverdue ? 'text-rose-400 font-semibold' : 'text-muted-foreground'}`}>
+                              {new Date(inst.dueDate).toLocaleDateString('es-CO')} • Cuota {inst.installmentNumber}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-xs font-extrabold text-white font-mono block">
+                            ${amount}
+                          </span>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full inline-block mt-0.5 ${
+                            isOverdue 
+                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' 
+                              : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                          }`}>
+                            {isOverdue ? 'Vencida' : 'Pendiente'}
+                          </span>
+                        </div>
+                      </Link>
+                    )
+                  })
+                )}
+              </div>
             </div>
+
           </div>
         </main>
       </div>

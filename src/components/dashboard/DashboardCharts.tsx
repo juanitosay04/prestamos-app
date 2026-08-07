@@ -19,60 +19,90 @@ type DashboardChartsProps = {
 }
 
 export function DashboardCharts({ monthlyData, portfolioData }: DashboardChartsProps) {
+  const totalLoans = portfolioData.reduce((a, b) => a + b.value, 0)
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      {/* Gráfica de Barras (Flujo de Caja) */}
-      <div className="glass-panel rounded-2xl p-6 lg:col-span-2">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-semibold text-white">Flujo de Caja Proyectado (Próximos 6 Meses)</h3>
-          <div className="flex gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-              <span className="text-xs text-muted-foreground">Capital Recuperado</span>
+      {/* Gráfica de Barras (Flujo de Caja Proyectado) */}
+      <div className="glass-panel rounded-2xl p-6 lg:col-span-2 border border-white/[0.08] flex flex-col justify-between">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+          <div>
+            <h3 className="text-base font-bold text-white tracking-tight">Flujo de Caja Proyectado</h3>
+            <p className="text-xs text-muted-foreground">Distribución de capital e intereses en los próximos 6 meses.</p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.06]">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span className="text-[11px] text-muted-foreground font-medium">Capital</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-              <span className="text-xs text-muted-foreground">Ganancia Neta</span>
+            <div className="flex items-center gap-1.5 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.06]">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span className="text-[11px] text-muted-foreground font-medium">Ganancia</span>
             </div>
           </div>
         </div>
+
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={monthlyData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-              <XAxis dataKey="name" stroke="#ffffff50" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="#ffffff50" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val/1000}k`} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+              <XAxis 
+                dataKey="name" 
+                stroke="#94a3b8" 
+                fontSize={11} 
+                tickLine={false} 
+                axisLine={false} 
+              />
+              <YAxis 
+                stroke="#94a3b8" 
+                fontSize={11} 
+                tickLine={false} 
+                axisLine={false} 
+                tickFormatter={(val) => `$${Math.round(val / 1000)}k`} 
+              />
               <Tooltip 
                 cursor={{ fill: '#ffffff05' }}
-                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
-                itemStyle={{ fontSize: '13px', fontWeight: '500' }}
+                contentStyle={{ 
+                  backgroundColor: '#0E131F', 
+                  border: '1px solid rgba(255, 255, 255, 0.1)', 
+                  borderRadius: '16px', 
+                  color: '#fff', 
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
+                  padding: '12px 16px'
+                }}
+                itemStyle={{ fontSize: '12px', fontWeight: '600' }}
                 formatter={(value: any, name: any) => [`$${Number(value).toLocaleString("es-CO", { maximumFractionDigits: 0 })}`, name]}
-                labelStyle={{ color: '#94a3b8', marginBottom: '8px' }}
+                labelStyle={{ color: '#94a3b8', marginBottom: '6px', fontSize: '11px', fontWeight: 'bold' }}
               />
-              <Bar dataKey="Capital" stackId="a" fill="#3b82f6" radius={[0, 0, 4, 4]} barSize={40} />
-              <Bar dataKey="Ganancia" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+              <Bar dataKey="Capital" stackId="a" fill="#3b82f6" radius={[0, 0, 4, 4]} barSize={36} />
+              <Bar dataKey="Ganancia" stackId="a" fill="#10b981" radius={[6, 6, 0, 0]} barSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       {/* Gráfica Circular (Estado de la Cartera) */}
-      <div className="glass-panel rounded-2xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-6">Estado de la Cartera</h3>
-        <div className="h-72 w-full relative">
+      <div className="glass-panel rounded-2xl p-6 border border-white/[0.08] flex flex-col justify-between">
+        <div>
+          <h3 className="text-base font-bold text-white tracking-tight">Estado de Cartera</h3>
+          <p className="text-xs text-muted-foreground">Distribución porcentual por situación del crédito.</p>
+        </div>
+
+        <div className="h-56 w-full relative my-2">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={portfolioData}
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
+                innerRadius={55}
+                outerRadius={75}
+                paddingAngle={4}
                 dataKey="value"
                 stroke="none"
               >
@@ -81,27 +111,39 @@ export function DashboardCharts({ monthlyData, portfolioData }: DashboardChartsP
                 ))}
               </Pie>
               <Tooltip 
-                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
-                formatter={(value: any) => [`${value} Préstamos`, "Cantidad"]}
-                itemStyle={{ fontSize: '13px', fontWeight: '500' }}
+                contentStyle={{ 
+                  backgroundColor: '#0E131F', 
+                  border: '1px solid rgba(255, 255, 255, 0.1)', 
+                  borderRadius: '16px', 
+                  color: '#fff', 
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+                  padding: '10px 14px'
+                }}
+                formatter={(value: any) => [`${value} Préstamos`, "Total"]}
+                itemStyle={{ fontSize: '12px', fontWeight: '600' }}
               />
             </PieChart>
           </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-2xl font-bold text-white">
-              {portfolioData.reduce((a, b) => a + b.value, 0)}
-            </span>
-            <span className="text-xs text-muted-foreground">Total</span>
-          </div>
           
-          <div className="flex justify-center gap-4 mt-2">
-            {portfolioData.map((entry, index) => (
-              <div key={index} className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                <span className="text-xs text-muted-foreground">{entry.name}</span>
-              </div>
-            ))}
+          {/* Centro del Donut con métrica clave */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-2xl font-extrabold text-white font-mono">
+              {totalLoans}
+            </span>
+            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Créditos</span>
           </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/[0.04]">
+          {portfolioData.map((entry, index) => (
+            <div key={index} className="flex items-center justify-between text-xs bg-white/[0.02] p-2 rounded-xl border border-white/[0.03]">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }}></div>
+                <span className="text-[11px] text-muted-foreground truncate">{entry.name}</span>
+              </div>
+              <span className="text-[11px] font-bold text-white font-mono ml-1">{entry.value}</span>
+            </div>
+          ))}
         </div>
       </div>
 

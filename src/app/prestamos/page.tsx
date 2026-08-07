@@ -4,12 +4,11 @@ import { getLoans } from "@/app/actions/loan"
 import { getClients } from "@/app/actions/client"
 import { getInvestors } from "@/app/actions/investor"
 import { getSession } from "@/lib/session"
-import { Briefcase, Calendar, CheckCircle2, AlertCircle, FileText } from "lucide-react"
+import { CheckCircle2, AlertCircle, Calendar } from "lucide-react"
 import { NewLoanButton } from "./NewLoanButton"
 import { MonthFilter } from "./MonthFilter"
 import { StatusFilter } from "./StatusFilter"
 import { PrestamosTableClient } from "./PrestamosTableClient"
-import Link from "next/link"
 
 export default async function PrestamosPage({ searchParams }: { searchParams: Promise<{ month?: string, year?: string, status?: string }> }) {
   const { month, year, status } = await searchParams
@@ -48,7 +47,7 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
 
     if (loan.status === "DEFAULTED") {
       derivedStatus = "Cancelado por pérdida"
-      statusColor = "bg-red-500/10 text-red-400 border-red-500/20"
+      statusColor = "bg-rose-500/10 text-rose-400 border-rose-500/20"
       statusIcon = <AlertCircle className="h-3 w-3" />
     } else if (loan.status === "REFINANCED") {
       derivedStatus = "Refinanciado"
@@ -59,7 +58,6 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
       statusColor = "bg-slate-500/10 text-slate-400 border-slate-500/20"
       statusIcon = <CheckCircle2 className="h-3 w-3" />
     } else {
-      // ACTIVE or OVERDUE
       const pendingInst = loan.installments.find(i => i.status === "PENDING")
       if (pendingInst) {
         const dueDate = new Date(pendingInst.dueDate)
@@ -70,11 +68,11 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
         if (diffDays < 0) {
           if (diffDays <= -30) {
             derivedStatus = "Mora excesiva"
-            statusColor = "bg-red-600/20 text-red-500 border-red-600/30"
+            statusColor = "bg-rose-600/20 text-rose-400 border-rose-600/30"
             statusIcon = <AlertCircle className="h-3 w-3" />
           } else {
             derivedStatus = "En mora"
-            statusColor = "bg-orange-500/10 text-orange-400 border-orange-500/20"
+            statusColor = "bg-amber-500/10 text-amber-400 border-amber-500/20"
             statusIcon = <AlertCircle className="h-3 w-3" />
           }
         } else if (diffDays === 0) {
@@ -83,7 +81,7 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
           statusIcon = <AlertCircle className="h-3 w-3" />
         } else if (diffDays > 0 && diffDays <= 3) {
           derivedStatus = "Próximo a pagar"
-          statusColor = "bg-emerald-400/10 text-emerald-300 border-emerald-400/20"
+          statusColor = "bg-cyan-400/10 text-cyan-300 border-cyan-400/20"
           statusIcon = <Calendar className="h-3 w-3" />
         }
       }
@@ -98,21 +96,25 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
     : enrichedLoans
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-[#07090E]">
       <Sidebar />
       <div className="flex-1 flex flex-col relative overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/5 blur-[120px] pointer-events-none" />
         
         <Header />
         
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 relative z-0">
-          <div className="max-w-6xl mx-auto space-y-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-8 relative z-0">
+          <div className="max-w-7xl mx-auto space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-1">Préstamos Activos</h1>
-                <p className="text-xs md:text-sm text-muted-foreground">Administra el dinero en circulación y cronogramas de pago.</p>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                  Préstamos Activos
+                </h1>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                  Administración de créditos, planes de cuotas y cronogramas de amortización.
+                </p>
               </div>
-              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
                 <StatusFilter currentStatus={status} />
                 <MonthFilter />
                 <NewLoanButton clients={mappedClients} investors={mappedInvestors} userRole={role} />
