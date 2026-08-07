@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import { Check, Loader2, X, Printer, MessageCircle, AlertTriangle, ArrowLeft, ShieldAlert } from "lucide-react"
 import { payInstallment } from "@/app/actions/payment"
 import { useReactToPrint } from "react-to-print"
-import { ReceiptTemplate, ReceiptData } from "@/components/ReceiptTemplate"
+import { ReceiptTemplate, ReceiptPreview, ReceiptData } from "@/components/ReceiptTemplate"
 import { CurrencyInput } from "@/components/ui/CurrencyInput"
 import toast from "react-hot-toast"
 
@@ -205,35 +205,33 @@ export function PayInstallmentButton({
             </div>
             
             {isSuccess && receiptData ? (
-              <div className="p-6 flex flex-col items-center gap-4 overflow-y-auto">
-                <div className="h-16 w-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mb-1">
-                  <Check className="h-8 w-8" />
+              <div className="flex flex-col gap-0 overflow-y-auto max-h-[80vh]">
+                {/* Recibo visual premium */}
+                <div className="p-4 pb-3">
+                  <ReceiptPreview data={receiptData} />
                 </div>
-                <div className="text-center">
-                  <h3 className="text-lg font-bold text-white">¡Pago Procesado con Éxito!</h3>
-                  <p className="text-xs text-muted-foreground mt-1">El comprobante oficial ha sido generado y el estado de la cuota actualizado.</p>
-                </div>
-                
-                <div className="w-full mt-3 flex flex-col gap-2.5">
+
+                {/* Botones de acción */}
+                <div className="px-5 pb-5 pt-2 flex flex-col gap-2.5 border-t border-white/[0.06]">
                   <button 
                     onClick={handlePrint}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-98"
+                    className="w-full bg-white/[0.06] hover:bg-white/[0.10] text-white px-4 py-2.5 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-white/[0.08] active:scale-98"
                   >
-                    <Printer className="h-4 w-4" />
+                    <Printer className="h-4 w-4 text-blue-400" />
                     Imprimir Recibo Térmico (POS)
                   </button>
 
                   <button 
                     onClick={handleSendWhatsApp}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-98"
+                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-98"
                   >
                     <MessageCircle className="h-4 w-4" />
-                    Enviar Comprobante por WhatsApp
+                    Enviar por WhatsApp
                   </button>
 
                   <button 
                     onClick={handleClose}
-                    className="w-full bg-white/[0.06] hover:bg-white/[0.12] text-white px-4 py-2.5 rounded-xl font-medium text-xs transition-colors"
+                    className="w-full bg-white/[0.04] hover:bg-white/[0.08] text-muted-foreground hover:text-white px-4 py-2 rounded-xl font-medium text-xs transition-colors"
                   >
                     Cerrar
                   </button>
