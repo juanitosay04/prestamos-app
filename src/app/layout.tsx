@@ -6,8 +6,11 @@ import { ToasterProvider } from "@/components/ui/ToasterProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Plataforma de Préstamos",
-  description: "Administración profesional de préstamos e inversiones",
+  title: {
+    default: "Préstamos JyJ",
+    template: "%s | Préstamos JyJ"
+  },
+  description: "Plataforma ejecutiva de administración de préstamos e inversiones JyJ",
 };
 
 export default function RootLayout({
