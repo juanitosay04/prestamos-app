@@ -14,6 +14,11 @@ export type ClearanceData = {
   startDate?: Date | string
   clearanceDate: Date | string
   installmentsCount?: number
+  principalPayments?: {
+    amount: number
+    date: string | Date
+    type: string
+  }[]
 }
 
 export const ClearanceCertificateTemplate = forwardRef<HTMLDivElement, { data: ClearanceData; isPreview?: boolean }>(({ data, isPreview = false }, ref) => {
@@ -148,6 +153,14 @@ export const ClearanceCertificateTemplate = forwardRef<HTMLDivElement, { data: C
                 <span className="text-slate-500 font-medium">Monto Total Cancelado:</span>
                 <span className="font-bold text-emerald-800">${(data.totalPaid / 100).toLocaleString("es-CO")} COP</span>
               </div>
+              {data.principalPayments && data.principalPayments.length > 0 && (
+                <div className="flex justify-between py-1 border-b border-slate-200/60 col-span-2 bg-emerald-50/50 px-2 rounded">
+                  <span className="text-emerald-800 font-semibold">Abonos Extraordinarios a Capital:</span>
+                  <span className="font-bold font-mono text-emerald-800">
+                    ${(data.principalPayments.reduce((s, p) => s + p.amount, 0) / 100).toLocaleString("es-CO")} COP ({data.principalPayments.length} abono{data.principalPayments.length > 1 ? 's' : ''})
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between py-1">
                 <span className="text-slate-500 font-medium">Fecha de Liquidación:</span>
                 <span className="font-bold text-slate-900">{formattedClearanceDate}</span>

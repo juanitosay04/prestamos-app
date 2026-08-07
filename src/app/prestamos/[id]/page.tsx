@@ -9,6 +9,7 @@ import { WhatsAppReminderButton } from "./WhatsAppReminderButton"
 import { RefinanceLoanButton } from "./RefinanceLoanButton"
 import { EditLoanButton } from "./EditLoanButton"
 import { PrintClearanceButton } from "./PrintClearanceButton"
+import { PrintInternalSettlementButton } from "./PrintInternalSettlementButton"
 import { PrincipalPaymentButton } from "./PrincipalPaymentButton"
 import { MarkDefaultedButton, ReviveLoanButton } from "./DefaultLoanButtons"
 import { PromissoryNoteCard } from "./PromissoryNoteCard"
@@ -80,6 +81,115 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
     orderBy: { createdAt: 'desc' }
   })
 
+  // Desglose estructurado de Abonos Extraordinarios a Capital
+  const principalPaymentsFormatted = principalPaymentsLog.map(log => {
+    let details: { amount: number, type: string, distributions?: { investorName: string, percentage: number, amount: number }[] } = { amount: 0, type: "" }
+    try { details = JSON.parse(log.details) } catch (e) {}
+    
+    const distributions = details.distributions && details.distributions.length > 0
+      ? details.distributions
+      : loan.investors.map(inv => ({
+          investorName: inv.investor.name,
+          percentage: inv.participationPercentage,
+          amount: Math.round((details.amount || 0) * (inv.participationPercentage / 100))
+        }))
+
+    return {
+      id: log.id,
+      date: log.createdAt,
+      amount: details.amount || 0,
+      type: details.type || "PRINCIPAL",
+      distributions
+    }
+  })
+
+  const totalPrincipalFromAbonos = principalPaymentsFormatted.reduce((sum, p) => sum + p.amount, 0)
+  const paidInstallments = loan.installments.filter(i => i.status === "PAID")
+  const totalPrincipalFromPaidInstallments = paidInstallments.reduce((sum, i) => sum + i.principalPart, 0)
+  const totalPrincipalPaidTotal = totalPrincipalFromPaidInstallments + totalPrincipalFromAbonos
+  const totalInterestPaidTotal = paidInstallments.reduce((sum, i) => sum + i.interestPart, 0)
+  const totalLateFeesPaidTotal = paidInstallments.reduce((sum, i) => sum + (i.lateFee || 0), 0)
+
+  // Cálculo de Comisiones Totales sobre lo cobrado
+  let secretaryCommissionTotal = 0
+  let companyCommissionTotal = 0
+  let referrerCommissionTotal = 0
+
+  paidInstallments.forEach(i => {
+    const totalInstInterest = i.interestPart + (i.lateFee || 0)
+    let secComm = 0
+    if (loan.secretaryCommissionType === "FIXED_AMOUNT") {
+      secComm = Math.round(loan.secretaryCommission / (loan.numberOfInstallments || 1))
+    } else if (loan.secretaryCommissionType === "PERCENTAGE_PRINCIPAL") {
+      const tot = loan.principalAmount * (loan.secretaryCommission / 100)
+      secComm = Math.round(tot / (loan.numberOfInstallments || 1))
+    } else {
+      secComm = Math.round(totalInstInterest * (loan.secretaryCommission / 100))
+    }
+    const jyjComm = Math.round(totalInstInterest * 0.20)
+    const refComm = loan.referredByInvestorId ? Math.round(totalInstInterest * 0.03) : 0
+
+    secretaryCommissionTotal += secComm
+    companyCommissionTotal += jyjComm
+    referrerCommissionTotal += refComm
+  })
+
+  const netInvestorYieldTotal = Math.max(0, (totalInterestPaidTotal + totalLateFeesPaidTotal) - secretaryCommissionTotal - companyCommissionTotal - referrerCommissionTotal)
+
+  // Resumen Contable por Inversionista
+  const investorsSummary = loan.investors.map(inv => {
+    const investedAmount = inv.investedAmount || Math.round(loan.principalAmount * (inv.participationPercentage / 100))
+    const principalReturnedFromInstallments = Math.round(totalPrincipalFromPaidInstallments * (inv.participationPercentage / 100))
+    const principalReturnedFromAbonos = principalPaymentsFormatted.reduce((sum, p) => {
+      const dist = p.distributions.find(d => d.investorName === inv.investor.name)
+      return sum + (dist ? dist.amount : 0)
+    }, 0)
+    const totalPrincipalReturned = principalReturnedFromInstallments + principalReturnedFromAbonos
+    const interestEarned = Math.round(netInvestorYieldTotal * (inv.participationPercentage / 100))
+    const totalLiquidated = totalPrincipalReturned + interestEarned
+    const pendingPrincipal = Math.max(0, investedAmount - totalPrincipalReturned)
+
+    return {
+      id: inv.investorId,
+      name: inv.investor.name,
+      percentage: inv.participationPercentage,
+      investedAmount,
+      principalReturnedFromInstallments,
+      principalReturnedFromAbonos,
+      totalPrincipalReturned,
+      interestEarned,
+      totalLiquidated,
+      pendingPrincipal
+    }
+  })
+
+  const internalSettlementData = {
+    loanId: loan.id,
+    clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+    idDocument: loan.client.idDocument,
+    clientPhone: loan.client.phone || undefined,
+    clientAddress: loan.client.address || undefined,
+    status: loan.status,
+    startDate: loan.startDate,
+    settlementDate: new Date(),
+    principalAmount: loan.principalAmount,
+    interestRate: loan.interestRate || 0,
+    interestType: loan.interestType,
+    numberOfInstallments: loan.numberOfInstallments,
+    installmentAmount: loan.installmentAmount,
+    totalPaid: totalPaid,
+    totalPrincipalPaid: totalPrincipalPaidTotal,
+    totalInterestPaid: totalInterestPaidTotal,
+    totalLateFeesPaid: totalLateFeesPaidTotal,
+    outstandingPrincipal: outstandingPrincipal,
+    secretaryCommissionTotal,
+    companyCommissionTotal,
+    referrerCommissionTotal,
+    netInvestorYieldTotal,
+    principalPayments: principalPaymentsFormatted,
+    investorsSummary
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
@@ -107,6 +217,9 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                 </div>
               </div>
               <div className="w-full md:w-auto flex flex-wrap items-center gap-2">
+                {/* Botón de Liquidación Interna y Repartición (Disponible para todos los estados) */}
+                <PrintInternalSettlementButton data={internalSettlementData} />
+
                 {loan.status === "ACTIVE" || loan.status === "OVERDUE" ? (
                   <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     {role === "ADMIN" && !hasPayments && (
@@ -168,7 +281,12 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                       totalPaid: totalPaid,
                       startDate: loan.startDate,
                       clearanceDate: new Date(),
-                      installmentsCount: loan.numberOfInstallments
+                      installmentsCount: loan.numberOfInstallments,
+                      principalPayments: principalPaymentsFormatted.map(p => ({
+                        amount: p.amount,
+                        date: p.date,
+                        type: p.type
+                      }))
                     }}
                   />
                 )}
