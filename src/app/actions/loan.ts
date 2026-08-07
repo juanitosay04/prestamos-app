@@ -920,15 +920,21 @@ export async function getInternalSettlementData(loanIds: string[]) {
         
         const distributions = details.distributions && details.distributions.length > 0
           ? details.distributions
-          : loan.investors.map(inv => ({
-              investorName: inv.investor.name,
-              percentage: inv.participationPercentage,
-              amount: Math.round((details.amount || 0) * (inv.participationPercentage / 100))
-            }))
+          : loan.investors.length > 0
+            ? loan.investors.map(inv => ({
+                investorName: inv.investor.name,
+                percentage: inv.participationPercentage,
+                amount: Math.round((details.amount || 0) * (inv.participationPercentage / 100))
+              }))
+            : [{
+                investorName: "Capital Propio (JyJ)",
+                percentage: 100,
+                amount: details.amount || 0
+              }]
 
         return {
           id: log.id,
-          date: log.createdAt,
+          date: log.createdAt ? log.createdAt.toISOString() : new Date().toISOString(),
           amount: details.amount || 0,
           type: details.type || "PRINCIPAL",
           distributions
@@ -974,7 +980,7 @@ export async function getInternalSettlementData(loanIds: string[]) {
       const netInvestorYieldTotal = Math.max(0, (totalInterestPaidTotal + totalLateFeesPaidTotal) - secretaryCommissionTotal - companyCommissionTotal - referrerCommissionTotal)
 
       // Inversionistas
-      const investorsSummary = loan.investors.map(inv => {
+      let investorsSummary = loan.investors.map(inv => {
         const investedAmount = inv.investedAmount || Math.round(loan.principalAmount * (inv.participationPercentage / 100))
         const principalReturnedFromInstallments = Math.round(totalPrincipalFromPaidInstallments * (inv.participationPercentage / 100))
         const principalReturnedFromAbonos = principalPaymentsFormatted.reduce((sum, p) => {
@@ -1000,15 +1006,32 @@ export async function getInternalSettlementData(loanIds: string[]) {
         }
       })
 
+      if (investorsSummary.length === 0) {
+        const totalPrincipalReturned = totalPrincipalPaidTotal
+        const pendingPrincipal = Math.max(0, loan.principalAmount - totalPrincipalReturned)
+        investorsSummary = [{
+          id: "jyj-propio",
+          name: "Capital Propio (JyJ Préstamos)",
+          percentage: 100,
+          investedAmount: loan.principalAmount,
+          principalReturnedFromInstallments: totalPrincipalFromPaidInstallments,
+          principalReturnedFromAbonos: totalPrincipalFromAbonos,
+          totalPrincipalReturned,
+          interestEarned: netInvestorYieldTotal,
+          totalLiquidated: totalPrincipalReturned + netInvestorYieldTotal,
+          pendingPrincipal
+        }]
+      }
+
       results.push({
         loanId: loan.id,
         clientName: `${loan.client.firstName} ${loan.client.lastName}`,
         idDocument: loan.client.idDocument,
-        clientPhone: loan.client.phone || undefined,
-        clientAddress: loan.client.address || undefined,
+        clientPhone: loan.client.phone || null,
+        clientAddress: loan.client.address || null,
         status: loan.status,
-        startDate: loan.startDate,
-        settlementDate: new Date(),
+        startDate: loan.startDate ? loan.startDate.toISOString() : new Date().toISOString(),
+        settlementDate: new Date().toISOString(),
         principalAmount: loan.principalAmount,
         interestRate: loan.interestRate || 0,
         interestType: loan.interestType,
@@ -1028,7 +1051,7 @@ export async function getInternalSettlementData(loanIds: string[]) {
       })
     }
 
-    return { success: true, data: results }
+    return { success: true, data: JSON.parse(JSON.stringify(results)) }
   } catch (error: any) {
     console.error("Error in getInternalSettlementData:", error)
     return { error: error.message || "Error al obtener datos de liquidación interna" }

@@ -64,19 +64,22 @@ export type InternalSettlementData = {
 }
 
 export const InternalSettlementTemplate = forwardRef<HTMLDivElement, { data: InternalSettlementData; isPreview?: boolean }>(({ data, isPreview = false }, ref) => {
-  const settlementDateObj = new Date(data.settlementDate)
-  const formattedSettlementDate = settlementDateObj.toLocaleDateString("es-CO", {
-    day: "numeric",
-    month: "long",
-    year: "numeric"
-  })
-  const formattedStartDate = new Date(data.startDate).toLocaleDateString("es-CO", {
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  })
-  const documentCode = `LIQ-${data.loanId.slice(-6).toUpperCase()}`
-  const totalAbonosCents = data.principalPayments.reduce((s, p) => s + p.amount, 0)
+  if (!data) return null
+
+  const settlementDateObj = data.settlementDate ? new Date(data.settlementDate) : new Date()
+  const formattedSettlementDate = !isNaN(settlementDateObj.getTime())
+    ? settlementDateObj.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })
+    : new Date().toLocaleDateString("es-CO")
+
+  const startDateObj = data.startDate ? new Date(data.startDate) : new Date()
+  const formattedStartDate = !isNaN(startDateObj.getTime())
+    ? startDateObj.toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })
+    : ""
+
+  const documentCode = `LIQ-${(data.loanId || "").slice(-6).toUpperCase()}`
+  const principalPayments = data.principalPayments || []
+  const totalAbonosCents = principalPayments.reduce((s, p) => s + (p.amount || 0), 0)
+  const investorsSummary = data.investorsSummary || []
 
   return (
     <div className={isPreview ? "w-full flex justify-center" : "w-full flex justify-center print:block"}>
@@ -202,20 +205,21 @@ export const InternalSettlementTemplate = forwardRef<HTMLDivElement, { data: Int
               </span>
             </div>
 
-            {data.principalPayments.length === 0 ? (
+            {principalPayments.length === 0 ? (
               <p className="text-[11px] text-slate-500 italic py-1 text-center">
                 No se registraron abonos extraordinarios a capital durante la vigencia del crédito.
               </p>
             ) : (
               <div className="space-y-2.5">
-                {data.principalPayments.map((p, pIdx) => {
-                  const pDate = new Date(p.date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
+                {principalPayments.map((p, pIdx) => {
+                  const pDate = p.date ? new Date(p.date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : ""
+                  const distributions = p.distributions || []
                   return (
                     <div key={p.id || pIdx} className="bg-white rounded-lg border border-emerald-200 p-2.5 text-[11px] shadow-xs">
                       <div className="flex justify-between items-center border-b border-slate-100 pb-1 mb-1.5">
                         <div className="flex items-center gap-2">
                           <span className="font-bold font-mono text-xs text-emerald-800">
-                            Abono #{pIdx + 1}: ${(p.amount / 100).toLocaleString('es-CO')}
+                            Abono #{pIdx + 1}: ${((p.amount || 0) / 100).toLocaleString('es-CO')}
                           </span>
                           <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold bg-slate-100 text-slate-700">
                             {p.type === 'REDUCE_TERM' ? '⚡ Recortó Plazo' : p.type === 'REDUCE_AMOUNT' ? '📉 Redujo Cuota' : 'Abono Directo'}
@@ -228,13 +232,13 @@ export const InternalSettlementTemplate = forwardRef<HTMLDivElement, { data: Int
 
                       {/* Repartición desmenuzada por cada inversor */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
-                        {p.distributions.map((d, dIdx) => (
+                        {distributions.map((d, dIdx) => (
                           <div key={dIdx} className="flex justify-between items-center bg-slate-50 px-2 py-1 rounded border border-slate-200/60">
                             <span className="font-medium text-slate-800 text-[10px]">
                               {d.investorName} <strong className="text-slate-500">({d.percentage}%)</strong>:
                             </span>
                             <span className="font-bold font-mono text-emerald-700 text-[11px]">
-                              ${(d.amount / 100).toLocaleString('es-CO')}
+                              ${((d.amount || 0) / 100).toLocaleString('es-CO')}
                             </span>
                           </div>
                         ))}
@@ -250,40 +254,40 @@ export const InternalSettlementTemplate = forwardRef<HTMLDivElement, { data: Int
           <div className="mb-4 bg-slate-50 rounded-xl border border-slate-200 p-3 text-[11px]">
             <h3 className="font-extrabold text-slate-800 uppercase tracking-wider text-[10px] mb-2 pb-1 border-b border-slate-200 flex justify-between items-center">
               <span>Distribución Financiera y Comisiones Totales</span>
-              <span className="font-mono text-slate-500 font-normal">Recaudo Total: ${(data.totalPaid / 100).toLocaleString('es-CO')}</span>
+              <span className="font-mono text-slate-500 font-normal">Recaudo Total: ${((data.totalPaid || 0) / 100).toLocaleString('es-CO')}</span>
             </h3>
 
             <div className="grid grid-cols-3 gap-3 text-[10px]">
               <div className="bg-white p-2 rounded border border-slate-200">
                 <span className="text-slate-500 block">Capital Reintegrado:</span>
-                <span className="font-bold font-mono text-slate-900 text-xs">${(data.totalPrincipalPaid / 100).toLocaleString('es-CO')}</span>
+                <span className="font-bold font-mono text-slate-900 text-xs">${((data.totalPrincipalPaid || 0) / 100).toLocaleString('es-CO')}</span>
               </div>
               <div className="bg-white p-2 rounded border border-slate-200">
                 <span className="text-slate-500 block">Intereses Recaudados:</span>
-                <span className="font-bold font-mono text-slate-900 text-xs">${(data.totalInterestPaid / 100).toLocaleString('es-CO')}</span>
+                <span className="font-bold font-mono text-slate-900 text-xs">${((data.totalInterestPaid || 0) / 100).toLocaleString('es-CO')}</span>
               </div>
               <div className="bg-white p-2 rounded border border-slate-200">
                 <span className="text-slate-500 block">Recargos por Mora:</span>
-                <span className="font-bold font-mono text-amber-700 text-xs">${(data.totalLateFeesPaid / 100).toLocaleString('es-CO')}</span>
+                <span className="font-bold font-mono text-amber-700 text-xs">${((data.totalLateFeesPaid || 0) / 100).toLocaleString('es-CO')}</span>
               </div>
             </div>
 
             <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-slate-200 text-[10px]">
               <div>
                 <span className="text-slate-500 block">Comisión Secretaría:</span>
-                <span className="font-bold font-mono text-slate-800">${(data.secretaryCommissionTotal / 100).toLocaleString('es-CO')}</span>
+                <span className="font-bold font-mono text-slate-800">${((data.secretaryCommissionTotal || 0) / 100).toLocaleString('es-CO')}</span>
               </div>
               <div>
                 <span className="text-slate-500 block">Comisión JyJ / Admin:</span>
-                <span className="font-bold font-mono text-slate-800">${(data.companyCommissionTotal / 100).toLocaleString('es-CO')}</span>
+                <span className="font-bold font-mono text-slate-800">${((data.companyCommissionTotal || 0) / 100).toLocaleString('es-CO')}</span>
               </div>
               <div>
                 <span className="text-slate-500 block">Comisión Referido:</span>
-                <span className="font-bold font-mono text-slate-800">${(data.referrerCommissionTotal / 100).toLocaleString('es-CO')}</span>
+                <span className="font-bold font-mono text-slate-800">${((data.referrerCommissionTotal || 0) / 100).toLocaleString('es-CO')}</span>
               </div>
               <div>
                 <span className="text-slate-500 block text-emerald-800 font-bold">Rendimiento Inversionistas:</span>
-                <span className="font-extrabold font-mono text-emerald-800">${(data.netInvestorYieldTotal / 100).toLocaleString('es-CO')}</span>
+                <span className="font-extrabold font-mono text-emerald-800">${((data.netInvestorYieldTotal || 0) / 100).toLocaleString('es-CO')}</span>
               </div>
             </div>
           </div>
@@ -310,19 +314,19 @@ export const InternalSettlementTemplate = forwardRef<HTMLDivElement, { data: Int
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-mono">
-                  {data.investorsSummary.map((inv, idx) => (
+                  {investorsSummary.map((inv, idx) => (
                     <tr key={inv.id || idx} className="hover:bg-slate-50">
                       <td className="p-2 font-sans font-bold text-slate-900">{inv.name}</td>
                       <td className="p-2 text-center">{inv.percentage}%</td>
-                      <td className="p-2 text-right text-slate-700">${(inv.investedAmount / 100).toLocaleString('es-CO')}</td>
-                      <td className="p-2 text-right text-slate-600">${(inv.principalReturnedFromInstallments / 100).toLocaleString('es-CO')}</td>
-                      <td className="p-2 text-right text-emerald-700 font-bold">${(inv.principalReturnedFromAbonos / 100).toLocaleString('es-CO')}</td>
-                      <td className="p-2 text-right text-blue-800 font-bold">${(inv.interestEarned / 100).toLocaleString('es-CO')}</td>
+                      <td className="p-2 text-right text-slate-700">${((inv.investedAmount || 0) / 100).toLocaleString('es-CO')}</td>
+                      <td className="p-2 text-right text-slate-600">${((inv.principalReturnedFromInstallments || 0) / 100).toLocaleString('es-CO')}</td>
+                      <td className="p-2 text-right text-emerald-700 font-bold">${((inv.principalReturnedFromAbonos || 0) / 100).toLocaleString('es-CO')}</td>
+                      <td className="p-2 text-right text-blue-800 font-bold">${((inv.interestEarned || 0) / 100).toLocaleString('es-CO')}</td>
                       <td className="p-2 text-right font-extrabold text-emerald-800 bg-emerald-50/50">
-                        ${(inv.totalLiquidated / 100).toLocaleString('es-CO')}
+                        ${((inv.totalLiquidated || 0) / 100).toLocaleString('es-CO')}
                       </td>
                       <td className="p-2 text-right font-bold text-slate-900">
-                        ${(inv.pendingPrincipal / 100).toLocaleString('es-CO')}
+                        ${((inv.pendingPrincipal || 0) / 100).toLocaleString('es-CO')}
                       </td>
                     </tr>
                   ))}

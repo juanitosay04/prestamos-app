@@ -78,22 +78,25 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
   }
 
   const handleWhatsAppShare = (item: InternalSettlementData) => {
-    const abonosCount = item.principalPayments.length
-    const totalAbonos = item.principalPayments.reduce((s, p) => s + p.amount, 0)
+    if (!item) return
+    const principalPayments = item.principalPayments || []
+    const investorsSummary = item.investorsSummary || []
+    const abonosCount = principalPayments.length
+    const totalAbonos = principalPayments.reduce((s, p) => s + (p.amount || 0), 0)
     
-    let invText = item.investorsSummary.map(inv => 
-      `• *${inv.name}* (${inv.percentage}%): Total Liquidado: $${(inv.totalLiquidated / 100).toLocaleString('es-CO')} | Cap. Devuelto: $${(inv.totalPrincipalReturned / 100).toLocaleString('es-CO')} | Rendimiento: $${(inv.interestEarned / 100).toLocaleString('es-CO')}`
+    let invText = investorsSummary.map(inv => 
+      `• *${inv.name}* (${inv.percentage}%): Total Liquidado: $${((inv.totalLiquidated || 0) / 100).toLocaleString('es-CO')} | Cap. Devuelto: $${((inv.totalPrincipalReturned || 0) / 100).toLocaleString('es-CO')} | Rendimiento: $${((inv.interestEarned || 0) / 100).toLocaleString('es-CO')}`
     ).join("\n")
 
     const message = encodeURIComponent(
       `📊 *RESUMEN DE LIQUIDACIÓN INTERNA JYJ*\n` +
-      `Préstamo: *#${item.loanId.slice(-6).toUpperCase()}*\n` +
+      `Préstamo: *#${(item.loanId || "").slice(-6).toUpperCase()}*\n` +
       `Cliente: *${item.clientName}* (CC: ${item.idDocument})\n` +
       `Estado: *${item.status}*\n\n` +
-      `💰 *Capital Inicial:* $${(item.principalAmount / 100).toLocaleString('es-CO')}\n` +
-      `📈 *Total Recaudado:* $${(item.totalPaid / 100).toLocaleString('es-CO')}\n` +
+      `💰 *Capital Inicial:* $${((item.principalAmount || 0) / 100).toLocaleString('es-CO')}\n` +
+      `📈 *Total Recaudado:* $${((item.totalPaid || 0) / 100).toLocaleString('es-CO')}\n` +
       `⚡ *Abonos a Capital:* ${abonosCount} abono(s) por $${(totalAbonos / 100).toLocaleString('es-CO')}\n\n` +
-      `👥 *REPARTICIÓN POR INVERSIONISTA:*\n${invText}\n\n` +
+      `👥 *REPARTICIÓN POR INVERSIONISTA:*\n${invText || "• Capital Propio JyJ (100%)"}\n\n` +
       `_Generado por Sistema Préstamos JyJ_`
     )
     window.open(`https://wa.me/?text=${message}`, "_blank")
@@ -101,21 +104,27 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
   const handleAction = async (mode: "CLIENT_PDF" | "CLIENT_PAY" | "INTERNAL_REPORT") => {
     if (mode === "INTERNAL_REPORT") {
-      setLoading(true)
-      const res = await getInternalSettlementData(selectedIds)
-      setLoading(false)
+      try {
+        setLoading(true)
+        const res = await getInternalSettlementData(selectedIds)
+        setLoading(false)
 
-      if (res.error) {
-        alert(res.error)
-        return
-      }
+        if (res.error) {
+          alert(res.error)
+          return
+        }
 
-      if (res.data && res.data.length > 0) {
-        setSettlementDataList(res.data)
-        setCurrentSettlementIndex(0)
-        setSettlementModalOpen(true)
-      } else {
-        alert("No se encontró información de liquidación para los préstamos seleccionados.")
+        if (res.data && res.data.length > 0) {
+          setSettlementDataList(res.data)
+          setCurrentSettlementIndex(0)
+          setSettlementModalOpen(true)
+        } else {
+          alert("No se encontró información de liquidación para los préstamos seleccionados.")
+        }
+      } catch (err: any) {
+        setLoading(false)
+        console.error("Error al cargar liquidación interna:", err)
+        alert("Ocurrió un error al procesar la liquidación interna: " + (err?.message || err))
       }
       return
     }
