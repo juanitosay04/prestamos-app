@@ -39,14 +39,23 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
 
   const allInvestors = await prisma.investor.findMany({ where: { deletedAt: null } })
 
-  const totalPaid = loan.installments.filter(i => i.status === "PAID").reduce((sum, curr) => sum + curr.expectedAmount, 0)
+  const totalPaid = loan.installments.reduce((sum, curr) => sum + (curr.amountPaid || (curr.status === "PAID" ? curr.expectedAmount : 0)), 0)
   const totalExpected = loan.installments.reduce((sum, curr) => sum + curr.expectedAmount, 0)
   const totalInterestEarned = loan.installments.reduce((sum, curr) => sum + curr.interestPart, 0)
   const totalLateFees = loan.installments.reduce((sum, curr) => sum + (curr.lateFee || 0), 0)
-  const progress = Math.round((totalPaid / totalExpected) * 100) || 0
+  const progress = totalExpected > 0 ? Math.round((totalPaid / totalExpected) * 100) : 0
 
-  const outstandingPrincipal = loan.installments.filter(i => i.status === "PENDING").reduce((sum, curr) => sum + curr.principalPart, 0)
-  const outstandingLateFee = loan.installments.filter(i => i.status === "PENDING").reduce((sum, curr) => sum + (curr.lateFee || 0), 0)
+  const outstandingPrincipal = loan.installments
+    .filter(i => i.status !== "PAID")
+    .reduce((sum, curr) => {
+      if (curr.status === "PARTIAL") {
+        const paidToInterest = Math.min(curr.amountPaid, curr.interestPart)
+        const paidToPrincipal = Math.max(0, curr.amountPaid - paidToInterest)
+        return sum + Math.max(0, curr.principalPart - paidToPrincipal)
+      }
+      return sum + curr.principalPart
+    }, 0)
+  const outstandingLateFee = loan.installments.filter(i => i.status !== "PAID").reduce((sum, curr) => sum + (curr.lateFee || 0), 0)
 
   const refinancedFromLoan = loan.refinancedFromId ? await prisma.loan.findUnique({
     where: { id: loan.refinancedFromId },
