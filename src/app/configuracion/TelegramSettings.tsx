@@ -1,14 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Send, CheckCircle2, AlertCircle, Loader2, Bot, Shield, Info, HelpCircle } from "lucide-react"
-import { saveTelegramSettings, testTelegramConnection, TelegramSettingsData } from "@/app/actions/settings"
+import { Send, CheckCircle2, AlertCircle, Loader2, Bot, Info, HelpCircle, Search, Sparkles } from "lucide-react"
+import { saveTelegramSettings, testTelegramConnection, detectTelegramChatId, TelegramSettingsData } from "@/app/actions/settings"
 import toast from "react-hot-toast"
 
 export function TelegramSettings({ initialSettings }: { initialSettings: TelegramSettingsData }) {
   const [form, setForm] = useState<TelegramSettingsData>(initialSettings)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [detecting, setDetecting] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
 
   const handleSave = async (e: React.FormEvent) => {
@@ -41,11 +42,29 @@ export function TelegramSettings({ initialSettings }: { initialSettings: Telegra
     }
   }
 
+  const handleAutoDetect = async () => {
+    if (!form.botToken) {
+      toast.error("Primero pega el Bot Token para poder detectar el grupo")
+      return
+    }
+
+    setDetecting(true)
+    const res = await detectTelegramChatId(form.botToken)
+    setDetecting(false)
+
+    if (res.success && res.chatId) {
+      setForm(prev => ({ ...prev, chatId: res.chatId! }))
+      toast.success(`¡Grupo detectado!: "${res.chatTitle}" (ID: ${res.chatId})`)
+    } else {
+      toast.error(res.error || "No se pudo detectar el grupo. Asegúrate de escribir un mensaje en el grupo primero.")
+    }
+  }
+
   return (
     <div className="glass-panel rounded-2xl p-6 border border-white/5 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shadow-lg shadow-blue-500/10">
             <Bot className="h-5 w-5" />
           </div>
           <div>
@@ -64,30 +83,56 @@ export function TelegramSettings({ initialSettings }: { initialSettings: Telegra
           className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5 self-start sm:self-auto bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20 transition-colors"
         >
           <HelpCircle className="h-4 w-4" />
-          {showHelp ? "Ocultar Guía" : "¿Cómo configurar el Bot?"}
+          {showHelp ? "Ocultar Guía" : "¿Cómo obtener el Token y Chat ID?"}
         </button>
       </div>
 
       {showHelp && (
-        <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 text-xs text-blue-200/90 space-y-2 animate-in fade-in duration-200">
-          <h4 className="font-bold text-blue-300 flex items-center gap-1.5">
-            <Info className="h-4 w-4" /> Pasos para obtener el Bot Token y Chat ID:
-          </h4>
-          <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground ml-1">
-            <li>Abre Telegram y busca <strong className="text-white">@BotFather</strong>. Envía el comando <code className="bg-black/30 px-1 py-0.5 rounded text-blue-300">/newbot</code> y sigue los pasos para crearlo.</li>
-            <li>Copia el <strong>Token HTTP API</strong> que te entrega (ej: <code className="bg-black/30 px-1 py-0.5 rounded text-blue-300">7123456789:AAH...</code>) y pégalo en el campo <i>Bot Token</i>.</li>
-            <li>Crea un grupo de Telegram con tus colaboradores y <strong>agrega a tu Bot</strong> al grupo dándole permisos de Administrador o permisos para enviar mensajes.</li>
-            <li>Para obtener el <strong>Chat ID</strong> del grupo, agrega al bot <strong className="text-white">@userinfobot</strong> o <strong className="text-white">@getidsbot</strong> al grupo, copia el ID numérico (usualmente empieza con signo menos, ej: <code className="bg-black/30 px-1 py-0.5 rounded text-blue-300">-1001234567890</code>) y pégalo en <i>Chat ID</i>.</li>
-            <li>Presiona <strong>"Probar Conexión"</strong> para comprobar que el mensaje llegue al grupo.</li>
-          </ol>
+        <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5 text-xs text-blue-200/90 space-y-4 animate-in fade-in duration-200">
+          <div>
+            <h4 className="font-bold text-sm text-blue-300 flex items-center gap-2 mb-1">
+              <Sparkles className="h-4 w-4" /> Paso 1: Crear tu Bot en Telegram
+            </h4>
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground ml-1">
+              <li>Abre Telegram y busca a <strong className="text-white">@BotFather</strong>.</li>
+              <li>Escribe el comando <code className="bg-black/40 px-1.5 py-0.5 rounded text-blue-300 font-mono">/newbot</code>.</li>
+              <li>Ponle un nombre a tu bot (ej: <i>Notificaciones JyJ</i>) y un nombre de usuario (ej: <i>jyj_notificaciones_bot</i>).</li>
+              <li>@BotFather te dará un <strong>Token HTTP API</strong> (ej: <code className="bg-black/40 px-1.5 py-0.5 rounded text-blue-300 font-mono">7123456789:AAH_XxXxXxXxXxXxXxXxXxXxXx</code>). Pégalo en el campo <i>Bot Token</i>.</li>
+            </ol>
+          </div>
+
+          <div className="border-t border-white/5 pt-3">
+            <h4 className="font-bold text-sm text-blue-300 flex items-center gap-2 mb-1">
+              <Search className="h-4 w-4" /> Paso 2: Obtener el Chat ID de tu Grupo (¡Fácil y Automático!)
+            </h4>
+            <div className="space-y-2 text-muted-foreground ml-1">
+              <p>
+                <strong className="text-emerald-400">✨ Opción Recomendada (Detección Automática):</strong>
+              </p>
+              <ol className="list-decimal list-inside space-y-1 ml-2">
+                <li>Crea o abre tu grupo de colaboradores en Telegram.</li>
+                <li><strong>Agrega a tu Bot al grupo</strong> (como Administrador o miembro).</li>
+                <li>Escribe <strong className="text-white">cualquier mensaje</strong> en el grupo (por ejemplo: <code className="bg-black/40 px-1.5 py-0.5 rounded text-blue-300">hola bot</code>).</li>
+                <li>Presiona el botón <strong className="text-white">"🔍 Auto-detectar Chat ID"</strong> aquí abajo y el sistema rellenará el ID automáticamente.</li>
+              </ol>
+
+              <p className="pt-2">
+                <strong className="text-blue-300">💡 Opción Alternativa con Bot:</strong>
+              </p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Agrega al bot <strong className="text-white">@RawDataBot</strong> al grupo.</li>
+                <li>Enviará un mensaje en código JSON. Copia el número que dice <code className="bg-black/40 px-1.5 py-0.5 rounded text-blue-300 font-mono">"id": -1001234567890</code> y pégalo en el campo <i>Chat ID</i>. (Luego puedes expulsar a @RawDataBot).</li>
+              </ul>
+            </div>
+          </div>
         </div>
       )}
 
       <form onSubmit={handleSave} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">
-              Bot Token de Telegram (API)
+            <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+              <span>Bot Token de Telegram (API)</span>
             </label>
             <input
               type="password"
@@ -99,9 +144,20 @@ export function TelegramSettings({ initialSettings }: { initialSettings: Telegra
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">
-              Chat ID del Grupo (o Canal)
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-muted-foreground">
+                Chat ID del Grupo
+              </label>
+              <button
+                type="button"
+                onClick={handleAutoDetect}
+                disabled={detecting || !form.botToken}
+                className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/20 transition-colors disabled:opacity-40"
+              >
+                {detecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                Auto-detectar Chat ID
+              </button>
+            </div>
             <input
               type="text"
               placeholder="ej: -1001928374650"

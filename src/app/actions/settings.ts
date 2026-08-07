@@ -133,3 +133,52 @@ export async function testTelegramConnection(botToken?: string, chatId?: string)
     return { success: false, error: error.message || "Error de red al conectar con Telegram" }
   }
 }
+
+export async function detectTelegramChatId(botToken: string) {
+  try {
+    const token = botToken.trim()
+    if (!token) {
+      return { success: false, error: "Primero debes ingresar el Token del Bot" }
+    }
+
+    const url = `https://api.telegram.org/bot${token}/getUpdates`
+    const res = await fetch(url, { cache: "no-store" })
+    const data = await res.json()
+
+    if (!res.ok || !data.ok) {
+      return { success: false, error: data.description || "Token de bot inválido" }
+    }
+
+    const updates = data.result || []
+    if (updates.length === 0) {
+      return {
+        success: false,
+        error: "Aún no se detectan mensajes. Asegúrate de añadir el bot a tu grupo de Telegram y escribir un mensaje en el chat (por ejemplo: 'hola') antes de presionar este botón."
+      }
+    }
+
+    // Buscar en orden inverso (los más recientes primero)
+    for (let i = updates.length - 1; i >= 0; i--) {
+      const update = updates[i]
+      const msg = update.message || update.my_chat_member || update.channel_post
+      if (msg && msg.chat) {
+        const chat = msg.chat
+        const title = chat.title || chat.username || chat.first_name || "Chat"
+        return {
+          success: true,
+          chatId: String(chat.id),
+          chatTitle: title,
+          type: chat.type
+        }
+      }
+    }
+
+    return {
+      success: false,
+      error: "No se encontró ningún ID en los mensajes recientes. Escribe otro mensaje en el grupo y vuelve a intentar."
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message || "Error al conectar con Telegram" }
+  }
+}
+
