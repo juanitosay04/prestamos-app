@@ -19,9 +19,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url))
   }
 
-  // RBAC: Secretarias no pueden entrar a gastos, configuracion ni inversionistas
+  // RBAC: Secretarias no pueden entrar a gastos ni configuracion
   if (session && session.role !== "ADMIN") {
-    if (path.startsWith("/gastos") || path.startsWith("/configuracion") || path.startsWith("/inversionistas")) {
+    if (path.startsWith("/gastos") || path.startsWith("/configuracion")) {
       return NextResponse.redirect(new URL("/", request.url))
     }
   }
