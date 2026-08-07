@@ -28,11 +28,24 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
   useEffect(() => {
     setMounted(true)
+    return () => {
+      // Cleanup al desmontar: restaurar overflow del body
+      document.body.style.overflow = "unset"
+    }
   }, [])
+
+  const closeModal = () => {
+    setSettlementModalOpen(false)
+    // Limpiar datos al cerrar para que no quede estado residual en memoria
+    setTimeout(() => {
+      setSettlementDataList([])
+      setCurrentSettlementIndex(0)
+    }, 250) // pequeño delay para que la animacion de salida se complete
+  }
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSettlementModalOpen(false)
+      if (e.key === "Escape") closeModal()
     }
     if (settlementModalOpen) {
       window.addEventListener("keydown", handleKeyDown)
@@ -575,7 +588,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
       {mounted && settlementModalOpen && settlementDataList.length > 0 && createPortal(
         <div 
           onClick={(e) => {
-            if (e.target === e.currentTarget) setSettlementModalOpen(false)
+            if (e.target === e.currentTarget) closeModal()
           }}
           className="fixed inset-0 z-[999999] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
@@ -631,7 +644,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                   )}
 
                   <button
-                    onClick={() => setSettlementModalOpen(false)}
+                    onClick={() => closeModal()}
                     className="h-9 w-9 bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white rounded-xl flex items-center justify-center transition-all border border-white/10 active:scale-95 ml-1"
                     title="Cerrar vista previa (Esc)"
                   >
