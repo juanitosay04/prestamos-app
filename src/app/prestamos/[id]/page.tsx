@@ -140,9 +140,13 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                       loanId: loan.id,
                       clientName: `${loan.client.firstName} ${loan.client.lastName}`,
                       idDocument: loan.client.idDocument,
+                      clientPhone: loan.client.phone || undefined,
+                      clientAddress: loan.client.address || undefined,
                       principalAmount: loan.principalAmount,
                       totalPaid: totalPaid,
-                      clearanceDate: new Date()
+                      startDate: loan.startDate,
+                      clearanceDate: new Date(),
+                      installmentsCount: loan.numberOfInstallments
                     }}
                   />
                 )}
