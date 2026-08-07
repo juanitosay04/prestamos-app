@@ -119,10 +119,12 @@ export function NewLoanButton({
       secCommEst = totalInterest * (effectiveSecVal / 100)
     }
 
-    // Estimated Investor portion of interest (after company commission if applicable)
+    // Rendimiento estimado para inversionistas:
+    // 1. Del interés total se descuentan las comisiones (JyJ y Secretaría)
+    // 2. Lo que queda (pool neto) se distribuye según el % de fondeo del inversionista
     const investorSharePct = totalPrincipalNum > 0 ? (currentTotalInvestorAmount / totalPrincipalNum) : 0
-    const investorGrossInterest = totalInterest * investorSharePct
-    const investorNetInterest = Math.max(0, investorGrossInterest - (compCommEst * investorSharePct))
+    const netInterestPool = Math.max(0, totalInterest - compCommEst - secCommEst)
+    const investorNetInterest = netInterestPool * investorSharePct
 
     setPreview({ 
       installmentAmount, 
