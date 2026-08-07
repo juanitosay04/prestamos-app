@@ -73,7 +73,9 @@ export function PrintInternalSettlementButton({ data }: { data: InternalSettleme
       </button>
 
       {/* Contenedor Oculto Exclusivo para Impresión Física / PDF Nativo */}
-      <InternalSettlementTemplate ref={printRef} data={data} isPreview={false} />
+      <div aria-hidden="true" style={{ position: "fixed", top: "-9999px", left: "-9999px", width: "820px", opacity: 0, pointerEvents: "none", zIndex: -9999 }}>
+        <InternalSettlementTemplate ref={printRef} data={data} isPreview={false} />
+      </div>
 
       {/* Modal de Vista Previa Ejecutiva montado en document.body */}
       {mounted && isOpen && createPortal(
