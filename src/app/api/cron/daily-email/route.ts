@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import nodemailer from "nodemailer"
+import { notifyDailySummary } from "@/lib/telegram"
 
-// Vercel Cron Job to send daily email notifications of pending and overdue installments
+// Vercel Cron Job to send daily email and telegram notifications of pending and overdue installments
 export async function GET(request: Request) {
   try {
     // 1. Fetch pending and overdue installments
@@ -40,6 +41,35 @@ export async function GET(request: Request) {
         loan: { include: { client: true } }
       }
     })
+
+    // Notificación automática a Telegram para colaboradores
+    try {
+      const formattedDueToday = dueTodayInstallments.map(inst => ({
+        clientName: `${inst.loan.client.firstName} ${inst.loan.client.lastName}`,
+        amount: inst.expectedAmount - inst.amountPaid,
+        installmentNumber: inst.installmentNumber
+      }))
+
+      const formattedOverdue = overdueInstallments.map(inst => {
+        const diffTime = Math.abs(today.getTime() - new Date(inst.dueDate).getTime())
+        const daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        return {
+          clientName: `${inst.loan.client.firstName} ${inst.loan.client.lastName}`,
+          amount: inst.expectedAmount - inst.amountPaid,
+          dueDate: new Date(inst.dueDate),
+          daysOverdue
+        }
+      })
+
+      if (formattedDueToday.length > 0 || formattedOverdue.length > 0) {
+        await notifyDailySummary({
+          dueToday: formattedDueToday,
+          overdue: formattedOverdue
+        })
+      }
+    } catch (telErr) {
+      console.error("Cron Telegram Error:", telErr)
+    }
 
     if (dueTodayInstallments.length === 0 && overdueInstallments.length === 0) {
       return NextResponse.json({ success: true, message: "No pending or overdue installments for today." })

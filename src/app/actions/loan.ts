@@ -5,6 +5,7 @@ import { addDays, addWeeks, addMonths } from "date-fns"
 import { revalidatePath } from "next/cache"
 import { getSession } from "@/lib/session"
 import { generateSecretaryCommissionExpense } from "./payment"
+import { notifyLoanCreated, notifyLoanRefinanced, notifyLoanDefaulted, notifyPrincipalPayment } from "@/lib/telegram"
 
 export async function getLoans(month?: number, year?: number) {
   try {
@@ -55,13 +56,22 @@ export async function markLoanAsDefaulted(loanId: string) {
       }
     })
 
-    // Find the loan's clientId to blacklist them
-    const loan = await prisma.loan.findUnique({ where: { id: loanId } })
+    const loan = await prisma.loan.findUnique({ 
+      where: { id: loanId },
+      include: { client: true }
+    })
     if (loan) {
       await prisma.client.update({
         where: { id: loan.clientId },
         data: { isBlacklisted: true }
       })
+
+      // Notificación Telegram
+      notifyLoanDefaulted({
+        loanId: loan.id,
+        clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+        principalAmount: loan.principalAmount
+      }).catch(err => console.error("Telegram notifyLoanDefaulted error:", err))
     }
 
     revalidatePath(`/prestamos/${loanId}`)
@@ -257,6 +267,47 @@ export async function createLoan(data: any) {
           details: JSON.stringify({ principal: principalAmount, role: session.role })
         }
       })
+    }
+
+    // Notificación en Telegram para colaboradores
+    try {
+      const clientInfo = await prisma.client.findUnique({ where: { id: clientId } })
+      if (clientInfo) {
+        const clientName = `${clientInfo.firstName} ${clientInfo.lastName}`
+        if (refinancedFromId) {
+          const oldLoan = await prisma.loan.findUnique({ where: { id: refinancedFromId } })
+          notifyLoanRefinanced({
+            newLoanId: loan.id,
+            oldLoanId: refinancedFromId,
+            clientName,
+            oldOutstandingPrincipal: oldLoan ? oldLoan.principalAmount : 0,
+            newPrincipal: loan.principalAmount,
+            numberOfInstallments: loan.numberOfInstallments,
+            installmentAmount: loan.installmentAmount,
+            interestType: loan.interestType
+          }).catch(err => console.error("Telegram refinance notification error:", err))
+        } else {
+          let investorsSummary = "Fondeo Propio"
+          if (investors && investors.length > 0) {
+            const invs = await prisma.investor.findMany({
+              where: { id: { in: investors.map((i: any) => i.investorId) } }
+            })
+            investorsSummary = invs.map(i => i.name).join(", ")
+          }
+          notifyLoanCreated({
+            loanId: loan.id,
+            clientName,
+            idDocument: clientInfo.idDocument,
+            principalAmount: loan.principalAmount,
+            numberOfInstallments: loan.numberOfInstallments,
+            installmentAmount: loan.installmentAmount,
+            interestType: loan.interestType,
+            investorsSummary
+          }).catch(err => console.error("Telegram new loan notification error:", err))
+        }
+      }
+    } catch (telErr) {
+      console.error("Telegram notification error in createLoan:", telErr)
     }
 
     revalidatePath("/prestamos")
@@ -469,6 +520,26 @@ export async function registerPrincipalPayment(
           details: JSON.stringify({ amount: amountInCents, type: adjustmentType })
         }
       })
+    }
+
+    // Notificación Telegram
+    try {
+      const loanData = await prisma.loan.findUnique({
+        where: { id: loanId },
+        include: { client: true, installments: { where: { status: "PENDING" } } }
+      })
+      if (loanData) {
+        const remainingP = loanData.installments.reduce((sum, inst) => sum + inst.principalPart, 0)
+        notifyPrincipalPayment({
+          loanId,
+          clientName: `${loanData.client.firstName} ${loanData.client.lastName}`,
+          amountPaid: amountInCents,
+          remainingPrincipal: remainingP,
+          isFullyPaid: loanData.status === "PAID" || remainingP === 0
+        }).catch(err => console.error("Telegram principal payment notification error:", err))
+      }
+    } catch (telErr) {
+      console.error("Telegram error:", telErr)
     }
 
     revalidatePath(`/prestamos/${loanId}`)

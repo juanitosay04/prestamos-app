@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { notifyPaymentReceived, notifyBatchPayments } from "@/lib/telegram"
 
 export async function payInstallment(installmentId: string, lateFeeInCents: number = 0, amountPaidInCents?: number) {
   try {
@@ -77,6 +78,36 @@ export async function payInstallment(installmentId: string, lateFeeInCents: numb
         await generateSecretaryCommissionExpense(tx, installment.loanId)
       }
     })
+
+    // Notificación Telegram
+    try {
+      const loanInfo = await prisma.loan.findUnique({
+        where: { id: installment.loanId },
+        include: {
+          client: true,
+          installments: true
+        }
+      })
+      if (loanInfo) {
+        const totalInst = loanInfo.installments.length
+        const remainingBalance = loanInfo.installments
+          .filter(i => i.status !== "PAID")
+          .reduce((sum, i) => sum + (i.expectedAmount - i.amountPaid), 0)
+        
+        notifyPaymentReceived({
+          loanId: loanInfo.id,
+          clientName: `${loanInfo.client.firstName} ${loanInfo.client.lastName}`,
+          installmentNumber: installment.installmentNumber,
+          totalInstallments: totalInst,
+          amountPaid: paymentAmount,
+          lateFee: lateFeeInCents,
+          remainingLoanBalance: remainingBalance,
+          isFullyPaid: remainingBalance === 0
+        }).catch(err => console.error("Telegram payment notification error:", err))
+      }
+    } catch (telErr) {
+      console.error("Telegram notification error in payInstallment:", telErr)
+    }
 
     revalidatePath(`/prestamos/${installment.loanId}`)
     revalidatePath(`/prestamos`)
@@ -191,6 +222,22 @@ export async function processBatchInstallments(loanIds: string[]) {
           referredByInvestor: referredByInvestorName ? { name: referredByInvestorName } : null
         })
       }
+    }
+
+    // Notificación Telegram para recaudo masivo
+    try {
+      const successful = results.filter(r => r.success)
+      if (successful.length > 0) {
+        const totalAmount = successful.reduce((sum, r) => sum + (r.amountPaid || 0), 0)
+        const clientNames = successful.map(r => r.clientName).filter(Boolean) as string[]
+        notifyBatchPayments({
+          processedCount: successful.length,
+          totalAmount,
+          clients: clientNames
+        }).catch(err => console.error("Telegram batch payment notification error:", err))
+      }
+    } catch (telErr) {
+      console.error("Telegram notification error in processBatchInstallments:", telErr)
     }
 
     revalidatePath(`/prestamos`)

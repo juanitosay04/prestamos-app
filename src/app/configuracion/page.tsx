@@ -1,12 +1,15 @@
 import { SidebarServer as Sidebar } from "@/components/layout/SidebarServer"
 import { Header } from "@/components/layout/Header"
 import { getUsers, deleteUser } from "@/app/actions/user"
+import { getTelegramSettings } from "@/app/actions/settings"
 import { MoreVertical, Trash2, Shield, User as UserIcon } from "lucide-react"
 import { NewUserButton } from "./NewUserButton"
 import { EditUserButton } from "./EditUserButton"
+import { TelegramSettings } from "./TelegramSettings"
 
 export default async function ConfiguracionPage() {
   const users = await getUsers()
+  const telegramSettings = await getTelegramSettings()
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -92,6 +95,9 @@ export default async function ConfiguracionPage() {
                 </table>
               </div>
             </div>
+
+            {/* Configuración de Notificaciones en Telegram */}
+            <TelegramSettings initialSettings={telegramSettings} />
           </div>
         </main>
       </div>
