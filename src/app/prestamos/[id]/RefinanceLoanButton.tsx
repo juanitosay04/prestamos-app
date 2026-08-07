@@ -32,7 +32,7 @@ export function RefinanceLoanButton({
   const [error, setError] = useState("")
 
   const effectivePendingCapital = outstandingPrincipal !== undefined ? outstandingPrincipal : currentPrincipal
-  const initialPrincipalValue = ((effectivePendingCapital > 0 ? effectivePendingCapital : currentPrincipal) / 100).toString()
+  const initialPrincipalValue = Math.round((effectivePendingCapital > 0 ? effectivePendingCapital : currentPrincipal) / 100).toString()
 
   // Form State pre-filled with outstanding balance
   const [principalAmount, setPrincipalAmount] = useState(initialPrincipalValue)
@@ -45,7 +45,7 @@ export function RefinanceLoanButton({
   
   const initialInvestors = currentInvestors && currentInvestors.length > 0
     ? currentInvestors.map(i => {
-        const amountPesos = ((currentPrincipal / 100) * (i.participationPercentage / 100)).toString()
+        const amountPesos = Math.round((currentPrincipal / 100) * (i.participationPercentage / 100)).toString()
         return { investorId: i.investorId, amount: amountPesos }
       })
     : []
@@ -99,7 +99,7 @@ export function RefinanceLoanButton({
   }
 
   const useExactPendingCapital = () => {
-    setPrincipalAmount((effectivePendingCapital / 100).toString())
+    setPrincipalAmount(Math.round(effectivePendingCapital / 100).toString())
     setPreview(null)
   }
 

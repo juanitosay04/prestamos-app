@@ -16,12 +16,11 @@ export function CurrencyInput({ value, onChange, className, ...props }: Currency
       return
     }
     
-    // Parse value removing non-digits to handle strings that might accidentally have dots
-    const cleanStr = String(value).replace(/[^\d-]/g, "")
-    const num = parseInt(cleanStr, 10)
-    
-    if (!isNaN(num)) {
-      setDisplayValue(num.toLocaleString("es-CO", { maximumFractionDigits: 0 }))
+    // Parse value without stripping decimal points
+    const parsed = typeof value === "number" ? value : parseFloat(String(value))
+    if (!isNaN(parsed)) {
+      const rounded = Math.round(parsed)
+      setDisplayValue(rounded.toLocaleString("es-CO", { maximumFractionDigits: 0 }))
     } else {
       setDisplayValue("")
     }
@@ -43,7 +42,14 @@ export function CurrencyInput({ value, onChange, className, ...props }: Currency
       rawValue = "-" + rawValue
     }
 
-    onChange(rawValue)
+    const num = parseInt(rawValue, 10)
+    if (!isNaN(num)) {
+      setDisplayValue(num.toLocaleString("es-CO", { maximumFractionDigits: 0 }))
+      onChange(num.toString())
+    } else {
+      setDisplayValue("")
+      onChange("")
+    }
   }
 
   return (

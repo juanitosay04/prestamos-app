@@ -35,19 +35,19 @@ export function EditLoanButton({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const [principalAmount, setPrincipalAmount] = useState((loan.principalAmount / 100).toString())
+  const [principalAmount, setPrincipalAmount] = useState(Math.round(loan.principalAmount / 100).toString())
   const [interestType, setInterestType] = useState(loan.interestType || "MONTHLY")
   const [interestCalculation, setInterestCalculation] = useState(loan.interestAmount && loan.interestAmount > 0 ? "AMOUNT" : "RATE")
   const [interestValue, setInterestValue] = useState(
     loan.interestAmount && loan.interestAmount > 0 
-      ? (loan.interestAmount / 100).toString() 
+      ? Math.round(loan.interestAmount / 100).toString() 
       : (loan.interestRate || 5).toString()
   )
   const [numberOfInstallments, setNumberOfInstallments] = useState(loan.numberOfInstallments.toString())
   const [startDate, setStartDate] = useState(
     new Date(loan.startDate).toISOString().split("T")[0]
   )
-  const [upfrontFee, setUpfrontFee] = useState(((loan.upfrontFee || 0) / 100).toString())
+  const [upfrontFee, setUpfrontFee] = useState(Math.round((loan.upfrontFee || 0) / 100).toString())
   const [secretaryCommission, setSecretaryCommission] = useState((loan.secretaryCommission || 0).toString())
   const [secretaryCommissionType, setSecretaryCommissionType] = useState(loan.secretaryCommissionType || "PERCENTAGE_INTEREST")
   const [companyCommission, setCompanyCommission] = useState((loan.companyCommission || 0).toString())
@@ -56,7 +56,7 @@ export function EditLoanButton({
 
   const initialInvestors = loan.investors && loan.investors.length > 0
     ? loan.investors.map(i => {
-        const amountPesos = ((loan.principalAmount / 100) * (i.participationPercentage / 100)).toString()
+        const amountPesos = Math.round((loan.principalAmount / 100) * (i.participationPercentage / 100)).toString()
         return { investorId: i.investorId, amount: amountPesos }
       })
     : []
