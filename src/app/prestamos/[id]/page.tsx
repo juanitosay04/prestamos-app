@@ -1,7 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Header } from "@/components/layout/Header"
 import { prisma } from "@/lib/prisma"
-import { ArrowLeft, User, DollarSign, Calendar, TrendingUp } from "lucide-react"
+import { ArrowLeft, User, DollarSign, Calendar, TrendingUp, Users, Wallet, ArrowDownToLine } from "lucide-react"
 import Link from "next/link"
 import { PayInstallmentButton } from "./PayInstallmentButton"
 import { InstallmentBreakdown } from "./InstallmentBreakdown"
@@ -139,6 +139,7 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                       pendingInstallmentsCount={loan.installments.filter(i => i.status !== "PAID").length}
                       totalInstallments={loan.numberOfInstallments}
                       remainingInterestCurrentPlan={loan.installments.filter(i => i.status !== "PAID").reduce((s, i) => s + i.interestPart, 0)}
+                      investors={loan.investors}
                     />
                     <RefinanceLoanButton 
                       oldLoanId={loan.id}
@@ -346,29 +347,68 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
 
                 {/* Historial de Abonos a Capital */}
                 {principalPaymentsLog.length > 0 && (
-                  <div className="glass-panel rounded-2xl p-6 border border-emerald-500/20">
-                    <h3 className="text-sm font-medium text-emerald-400 flex items-center gap-2 mb-4">
-                      <TrendingUp className="h-4 w-4" /> Abonos Extraordinarios a Capital
-                    </h3>
+                  <div className="glass-panel rounded-2xl p-6 border border-emerald-500/20 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" /> Abonos Extraordinarios a Capital
+                      </h3>
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                        {principalPaymentsLog.length} {principalPaymentsLog.length === 1 ? "Abono" : "Abonos"}
+                      </span>
+                    </div>
+
                     <div className="space-y-3">
                       {principalPaymentsLog.map(log => {
-                        let details = { amount: 0, type: "" }
+                        let details: { amount: number, type: string, distributions?: { investorName: string, percentage: number, amount: number }[] } = { amount: 0, type: "" }
                         try { details = JSON.parse(log.details) } catch (e) {}
                         
+                        const abonoPesos = details.amount / 100
+                        const distributions = details.distributions && details.distributions.length > 0
+                          ? details.distributions
+                          : loan.investors.map(inv => ({
+                              investorName: inv.investor.name,
+                              percentage: inv.participationPercentage,
+                              amount: Math.round(details.amount * (inv.participationPercentage / 100))
+                            }))
+
                         return (
-                          <div key={log.id} className="p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/20 flex flex-col gap-1">
-                            <div className="flex justify-between items-center">
-                              <span className="text-lg font-bold text-emerald-400">
-                                ${(details.amount / 100).toLocaleString('es-CO')}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(log.createdAt).toLocaleDateString()}
+                          <div key={log.id} className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20 space-y-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="text-lg font-bold text-emerald-400 font-mono block">
+                                  ${abonoPesos.toLocaleString('es-CO')}
+                                </span>
+                                <span className="text-[11px] text-emerald-300/80 font-medium">
+                                  {details.type === 'REDUCE_TERM' ? "⚡ Recortó plazo del préstamo" : 
+                                   details.type === 'REDUCE_AMOUNT' ? "📉 Redujo valor de cuotas" : "Abono directo a capital"}
+                                </span>
+                              </div>
+                              <span className="text-xs text-muted-foreground font-mono bg-black/30 px-2 py-1 rounded">
+                                {new Date(log.createdAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
                               </span>
                             </div>
-                            <span className="text-xs text-emerald-400/80 font-medium">
-                              {details.type === 'REDUCE_TERM' ? "Recortó plazo del préstamo" : 
-                               details.type === 'REDUCE_AMOUNT' ? "Redujo valor de cuotas" : "Abono a capital"}
-                            </span>
+
+                            {/* Repartición por Inversionista */}
+                            {distributions && distributions.length > 0 && (
+                              <div className="pt-2 border-t border-white/10 space-y-1.5">
+                                <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground flex items-center gap-1">
+                                  <Users className="h-3 w-3 text-emerald-400" /> Repartición a Inversionistas:
+                                </span>
+                                <div className="space-y-1">
+                                  {distributions.map((d, dIdx) => (
+                                    <div key={dIdx} className="flex justify-between items-center text-xs py-1 px-2 rounded bg-black/20">
+                                      <span className="text-white font-medium flex items-center gap-1.5">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" />
+                                        {d.investorName} <span className="text-muted-foreground text-[10px]">({d.percentage}%)</span>
+                                      </span>
+                                      <span className="font-bold text-emerald-400 font-mono">
+                                        ${(d.amount / 100).toLocaleString('es-CO')}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )
                       })}

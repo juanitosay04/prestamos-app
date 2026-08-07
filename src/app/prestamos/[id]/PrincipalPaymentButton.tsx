@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { createPortal } from "react-dom"
-import { ArrowDownToLine, Loader2, X, AlertCircle, TrendingDown, Clock, Sparkles, CheckCircle2, ShieldCheck } from "lucide-react"
+import { ArrowDownToLine, Loader2, X, AlertCircle, TrendingDown, Clock, Sparkles, CheckCircle2, ShieldCheck, Users, Wallet } from "lucide-react"
 import { registerPrincipalPayment } from "@/app/actions/loan"
 import { CurrencyInput } from "@/components/ui/CurrencyInput"
 
@@ -15,6 +15,11 @@ type Props = {
   pendingInstallmentsCount?: number
   totalInstallments?: number
   remainingInterestCurrentPlan?: number
+  investors?: {
+    investor: { name: string }
+    participationPercentage: number
+    investedAmount: number
+  }[]
 }
 
 export function PrincipalPaymentButton({ 
@@ -25,7 +30,8 @@ export function PrincipalPaymentButton({
   installmentAmount = 0,
   pendingInstallmentsCount = 0,
   totalInstallments = 0,
-  remainingInterestCurrentPlan = 0
+  remainingInterestCurrentPlan = 0,
+  investors = []
 }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -191,7 +197,7 @@ export function PrincipalPaymentButton({
                   Abono Extraordinario a Capital
                 </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Simulación de impacto financiero y reajuste en cuota o plazo
+                  Simulación de impacto financiero y liquidación exacta para inversionistas
                 </p>
               </div>
               <button 
@@ -287,9 +293,61 @@ export function PrincipalPaymentButton({
                 )}
               </div>
 
+              {/* REPARTICIÓN EXACTA DE CAPITAL ENTRE INVERSIONISTAS */}
+              {abonoPesos > 0 && investors && investors.length > 0 && (
+                <div className="bg-white/5 border border-emerald-500/30 rounded-2xl p-4 space-y-3 shadow-inner">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-emerald-500/20 rounded-lg text-emerald-400">
+                        <Wallet className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider">Repartición de este Capital a Inversionistas</h4>
+                        <p className="text-[11px] text-muted-foreground">Distribución 100% pura a capital según participación</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      Total: ${abonoPesos.toLocaleString('es-CO')}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {investors.map((inv, idx) => {
+                      const sharePesos = Math.round(abonoPesos * (inv.participationPercentage / 100))
+                      return (
+                        <div 
+                          key={idx} 
+                          className="flex justify-between items-center p-3 rounded-xl bg-black/40 border border-white/5 hover:border-emerald-500/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold text-xs border border-emerald-500/30">
+                              {inv.investor.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-white">{inv.investor.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono">
+                                Aporte: {inv.participationPercentage}% del préstamo
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right font-mono">
+                            <span className="text-base font-extrabold text-emerald-400 block">
+                              ${sharePesos.toLocaleString('es-CO')}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+                              A devolver a su cuenta
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* SELECCIÓN Y COMPARATIVA EN VIVO */}
               {abonoPesos > 0 && simReduceTerm && simReduceAmount && (
-                <div className="space-y-3 pt-2">
+                <div className="space-y-3 pt-1">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-semibold text-white flex items-center gap-1.5">
                       <Sparkles className="h-4 w-4 text-emerald-400" />

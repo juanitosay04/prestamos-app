@@ -545,13 +545,39 @@ export async function registerPrincipalPayment(
     })
 
     if (session) {
+      // Obtener los inversionistas del préstamo para guardar la repartición exacta
+      const loanForDist = await prisma.loan.findUnique({
+        where: { id: loanId },
+        include: {
+          investors: {
+            include: {
+              investor: true
+            }
+          }
+        }
+      })
+
+      const distributions = (loanForDist?.investors || []).map(inv => {
+        const share = Math.round(amountInCents * (inv.participationPercentage / 100))
+        return {
+          investorId: inv.investorId,
+          investorName: inv.investor.name,
+          percentage: inv.participationPercentage,
+          amount: share
+        }
+      })
+
       await prisma.auditLog.create({
         data: {
           userId: session.userId,
           action: "PRINCIPAL_PAYMENT",
           entityType: "Loan",
           entityId: loanId,
-          details: JSON.stringify({ amount: amountInCents, type: adjustmentType })
+          details: JSON.stringify({ 
+            amount: amountInCents, 
+            type: adjustmentType,
+            distributions 
+          })
         }
       })
     }
