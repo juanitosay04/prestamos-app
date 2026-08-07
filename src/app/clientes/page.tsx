@@ -6,9 +6,11 @@ import { NewClientButton } from "./NewClientButton"
 import { EditClientModal } from "./EditClientModal"
 import { BlacklistToggleButton } from "./BlacklistToggleButton"
 import { ClientStatusFilter } from "./ClientStatusFilter"
+import { getSession } from "@/lib/session"
 import Link from "next/link"
 
 export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const session = await getSession()
   const { status } = await searchParams
   const todosClientes = await getClients()
 
@@ -109,7 +111,9 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
                         </Link>
                         
                         <div className="flex items-center gap-1.5">
-                          <BlacklistToggleButton clientId={cliente.id} isBlacklisted={cliente.isBlacklisted} />
+                          {session?.role === "ADMIN" && (
+                            <BlacklistToggleButton clientId={cliente.id} isBlacklisted={cliente.isBlacklisted} />
+                          )}
                           <EditClientModal client={cliente} />
                         </div>
                       </div>
@@ -176,7 +180,9 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
                                 <span>Ver Expediente</span>
                               </Link>
                               
-                              <BlacklistToggleButton clientId={cliente.id} isBlacklisted={cliente.isBlacklisted} />
+                              {session?.role === "ADMIN" && (
+                                <BlacklistToggleButton clientId={cliente.id} isBlacklisted={cliente.isBlacklisted} />
+                              )}
                               <EditClientModal client={cliente} />
                             </div>
                           </td>

@@ -37,7 +37,7 @@ export default async function InversionistasPage() {
                   Control de capital externo, rendimientos y participación en cartera.
                 </p>
               </div>
-              {session?.role === "ADMIN" && <NewInvestorButton />}
+              {(session?.role === "ADMIN" || session?.role === "SECRETARY") && <NewInvestorButton />}
             </div>
 
             {/* KPI Cards de Inversionistas */}

@@ -25,8 +25,10 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { EditClientModal } from "../EditClientModal"
 import { BlacklistToggleButton } from "../BlacklistToggleButton"
+import { getSession } from "@/lib/session"
 
 export default async function ClientDossierPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession()
   const { id } = await params
 
   const client = await prisma.client.findUnique({
@@ -162,7 +164,9 @@ export default async function ClientDossierPage({ params }: { params: Promise<{ 
                   <span>WhatsApp</span>
                 </a>
 
-                <BlacklistToggleButton clientId={client.id} isBlacklisted={client.isBlacklisted} />
+                {session?.role === "ADMIN" && (
+                  <BlacklistToggleButton clientId={client.id} isBlacklisted={client.isBlacklisted} />
+                )}
                 <EditClientModal client={client} />
                 
                 <Link

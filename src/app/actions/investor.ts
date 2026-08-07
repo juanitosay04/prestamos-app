@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { getSession } from "@/lib/session"
 
 export async function getInvestors() {
   try {
@@ -57,6 +58,20 @@ export async function createInvestor(formData: FormData) {
         email: email || null,
       }
     })
+    
+    // Notificación / Auditoría
+    const session = await getSession()
+    if (session) {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.userId,
+          action: "CREATE_INVESTOR",
+          entityType: "Investor",
+          entityId: investor.id,
+          details: JSON.stringify({ name, role: session.role })
+        }
+      })
+    }
     
     revalidatePath("/inversionistas")
     return { success: true, investor }
