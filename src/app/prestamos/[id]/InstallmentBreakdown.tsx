@@ -12,6 +12,8 @@ type BreakdownProps = {
   lateFee: number
   secretaryCommissionType: string
   secretaryCommission: number
+  companyCommissionType: string
+  companyCommission: number
   principalAmount: number
   numberOfInstallments: number
   investors: {
@@ -30,6 +32,8 @@ export function InstallmentBreakdown({
   lateFee,
   secretaryCommissionType,
   secretaryCommission,
+  companyCommissionType,
+  companyCommission,
   principalAmount,
   numberOfInstallments,
   investors,
@@ -56,8 +60,16 @@ export function InstallmentBreakdown({
     secretaryCommissionAmount = Math.round(totalInterest * (secretaryCommission / 100))
   }
   
-  // 2. Extraer la comisión fija de JyJ (20% sobre la rentabilidad)
-  const jyjCommissionAmount = Math.round(totalInterest * 0.20)
+  // 2. Calcular comisión JyJ desde la config real del préstamo (no hardcoded)
+  let jyjCommissionAmount = 0
+  if (companyCommissionType === "FIXED_AMOUNT") {
+    jyjCommissionAmount = Math.round(companyCommission / numberOfInstallments)
+  } else if (companyCommissionType === "PERCENTAGE_PRINCIPAL") {
+    jyjCommissionAmount = Math.round((principalAmount * (companyCommission / 100)) / numberOfInstallments)
+  } else {
+    // PERCENTAGE_INTEREST (más común)
+    jyjCommissionAmount = Math.round(totalInterest * (companyCommission / 100))
+  }
 
   // 3. Extraer la comisión de referido si existe (3% sobre la rentabilidad)
   const referralCommissionAmount = referredByInvestor ? Math.round(totalInterest * 0.03) : 0
@@ -142,24 +154,32 @@ export function InstallmentBreakdown({
               )}
 
               {/* Comisión Fija JyJ */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2">
-                  <Building2 className="h-4 w-4 text-purple-400" /> Comisión JyJ
-                </h3>
-                
-                <div className="flex justify-between items-center p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center">
-                      <Building2 className="h-4 w-4" />
+              {companyCommission > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2">
+                    <Building2 className="h-4 w-4 text-purple-400" /> Comisión JyJ
+                  </h3>
+                  
+                  <div className="flex justify-between items-center p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                        <Building2 className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white">Comisión Plataforma JyJ</p>
+                        <p className="text-xs text-purple-400/80">
+                          {companyCommissionType === "FIXED_AMOUNT"
+                            ? "Fracción de comisión fija"
+                            : companyCommissionType === "PERCENTAGE_PRINCIPAL"
+                              ? `${companyCommission}% sobre el capital`
+                              : `${companyCommission}% de la rentabilidad`}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">Comisión Plataforma JyJ</p>
-                      <p className="text-xs text-purple-400/80">20% fijo de la rentabilidad</p>
-                    </div>
+                    <span className="font-bold text-purple-400">${(jyjCommissionAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <span className="font-bold text-purple-400">${(jyjCommissionAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-              </div>
+              )}
 
               {/* Inversionistas */}
               <div className="space-y-3">

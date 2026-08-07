@@ -612,6 +612,8 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                                 lateFee={inst.lateFee || 0}
                                 secretaryCommissionType={loan.secretaryCommissionType}
                                 secretaryCommission={loan.secretaryCommission}
+                                companyCommissionType={loan.companyCommissionType}
+                                companyCommission={loan.companyCommission}
                                 principalAmount={loan.principalAmount}
                                 numberOfInstallments={loan.numberOfInstallments}
                                 investors={loan.investors}
