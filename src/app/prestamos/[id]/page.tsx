@@ -130,7 +130,16 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                         availableInvestors={allInvestors}
                       />
                     )}
-                    <PrincipalPaymentButton loanId={loan.id} outstandingPrincipal={outstandingPrincipal} />
+                    <PrincipalPaymentButton 
+                      loanId={loan.id} 
+                      outstandingPrincipal={outstandingPrincipal}
+                      interestRate={loan.interestRate || 0}
+                      interestType={loan.interestType}
+                      installmentAmount={loan.installmentAmount}
+                      pendingInstallmentsCount={loan.installments.filter(i => i.status !== "PAID").length}
+                      totalInstallments={loan.numberOfInstallments}
+                      remainingInterestCurrentPlan={loan.installments.filter(i => i.status !== "PAID").reduce((s, i) => s + i.interestPart, 0)}
+                    />
                     <RefinanceLoanButton 
                       oldLoanId={loan.id}
                       clientId={loan.clientId}

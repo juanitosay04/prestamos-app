@@ -401,7 +401,7 @@ export async function registerPrincipalPayment(
         where: { id: loanId },
         include: {
           installments: {
-            where: { status: { in: ["PENDING"] } },
+            where: { status: { in: ["PENDING", "LATE", "PARTIAL"] } },
             orderBy: { installmentNumber: "asc" }
           }
         }
