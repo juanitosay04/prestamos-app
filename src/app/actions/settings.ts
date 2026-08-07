@@ -14,6 +14,68 @@ export interface TelegramSettingsData {
   notifyOverdue: boolean
 }
 
+export interface SecretaryCommissionSettingsData {
+  commissionType: string // "PERCENTAGE_INTEREST" | "PERCENTAGE_PRINCIPAL" | "FIXED_AMOUNT"
+  commissionValue: number
+}
+
+export async function getSecretaryCommissionSettings(): Promise<SecretaryCommissionSettingsData> {
+  try {
+    const settings = await prisma.setting.findMany({
+      where: {
+        key: {
+          in: [
+            "DEFAULT_SECRETARY_COMMISSION_TYPE",
+            "DEFAULT_SECRETARY_COMMISSION_VALUE"
+          ]
+        }
+      }
+    })
+
+    const map = new Map(settings.map(s => [s.key, s.value]))
+
+    return {
+      commissionType: map.get("DEFAULT_SECRETARY_COMMISSION_TYPE") || "PERCENTAGE_INTEREST",
+      commissionValue: parseFloat(map.get("DEFAULT_SECRETARY_COMMISSION_VALUE") || "0")
+    }
+  } catch (error) {
+    console.error("Error fetching secretary commission settings:", error)
+    return {
+      commissionType: "PERCENTAGE_INTEREST",
+      commissionValue: 0
+    }
+  }
+}
+
+export async function saveSecretaryCommissionSettings(data: SecretaryCommissionSettingsData) {
+  try {
+    const session = await getSession()
+    if (!session || session.role !== "ADMIN") {
+      return { success: false, error: "Solo los administradores pueden modificar las reglas de comisión" }
+    }
+
+    const updates = [
+      { key: "DEFAULT_SECRETARY_COMMISSION_TYPE", value: data.commissionType },
+      { key: "DEFAULT_SECRETARY_COMMISSION_VALUE", value: String(data.commissionValue) }
+    ]
+
+    for (const item of updates) {
+      await prisma.setting.upsert({
+        where: { key: item.key },
+        create: item,
+        update: { value: item.value }
+      })
+    }
+
+    revalidatePath("/configuracion")
+    revalidatePath("/prestamos")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error saving secretary commission settings:", error)
+    return { success: false, error: error.message || "Error al guardar configuración de comisión" }
+  }
+}
+
 export async function getTelegramSettings(): Promise<TelegramSettingsData> {
   try {
     const settings = await prisma.setting.findMany({
@@ -181,4 +243,3 @@ export async function detectTelegramChatId(botToken: string) {
     return { success: false, error: error.message || "Error al conectar con Telegram" }
   }
 }
-

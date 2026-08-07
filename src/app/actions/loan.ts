@@ -5,6 +5,7 @@ import { addDays, addWeeks, addMonths } from "date-fns"
 import { revalidatePath } from "next/cache"
 import { getSession } from "@/lib/session"
 import { generateSecretaryCommissionExpense } from "./payment"
+import { getSecretaryCommissionSettings } from "./settings"
 import { notifyLoanCreated, notifyLoanRefinanced, notifyLoanDefaulted, notifyPrincipalPayment } from "@/lib/telegram"
 
 export async function getLoans(month?: number, year?: number) {
@@ -139,6 +140,22 @@ export async function createLoan(data: any) {
       refinancedFromId
     } = data
 
+    // Verificar sesión y cargar comisión por defecto si aplica
+    const session = await getSession()
+    let finalSecComm = typeof secretaryCommission === "number" ? secretaryCommission : parseFloat(secretaryCommission) || 0
+    let finalSecCommType = secretaryCommissionType || "PERCENTAGE_INTEREST"
+
+    if (finalSecComm === 0 || session?.role === "SECRETARY") {
+      const defaultComm = await getSecretaryCommissionSettings()
+      if (defaultComm && defaultComm.commissionValue > 0) {
+        finalSecComm = defaultComm.commissionValue
+        finalSecCommType = defaultComm.commissionType
+        if (finalSecCommType === "FIXED_AMOUNT") {
+          finalSecComm = Math.round(finalSecComm * 100)
+        }
+      }
+    }
+
     // Check if client is blacklisted
     const client = await prisma.client.findUnique({ where: { id: clientId } })
     if (client?.isBlacklisted) {
@@ -228,8 +245,8 @@ export async function createLoan(data: any) {
           interestRate: interestRate || 0,
           interestType: interestType as any,
           interestAmount: interestAmount || null,
-          secretaryCommission: secretaryCommission,
-          secretaryCommissionType: secretaryCommissionType as any,
+          secretaryCommission: finalSecComm,
+          secretaryCommissionType: finalSecCommType as any,
           upfrontFee: upfrontFee || 0,
           startDate: new Date(startDate),
           endDate,

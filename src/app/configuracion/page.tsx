@@ -1,36 +1,59 @@
 import { SidebarServer as Sidebar } from "@/components/layout/SidebarServer"
 import { Header } from "@/components/layout/Header"
 import { getUsers, deleteUser } from "@/app/actions/user"
-import { getTelegramSettings } from "@/app/actions/settings"
+import { getTelegramSettings, getSecretaryCommissionSettings } from "@/app/actions/settings"
 import { Trash2, Shield, User as UserIcon, CheckCircle2 } from "lucide-react"
 import { NewUserButton } from "./NewUserButton"
 import { EditUserButton } from "./EditUserButton"
 import { TelegramSettings } from "./TelegramSettings"
+import { CommissionSettings } from "./CommissionSettings"
 
 export default async function ConfiguracionPage() {
   const users = await getUsers()
   const telegramSettings = await getTelegramSettings()
+  const commissionSettings = await getSecretaryCommissionSettings()
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#07090E]">
+    <div className="flex h-screen overflow-hidden bg-[#090D16]">
       <Sidebar />
       <div className="flex-1 flex flex-col relative overflow-hidden">
-        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/5 blur-[120px] pointer-events-none" />
+        {/* Glow ambient background lights */}
+        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-indigo-600/10 blur-[140px] pointer-events-none" />
         
         <Header />
         
-        <main className="flex-1 overflow-y-auto p-4 sm:p-8 relative z-0">
-          <div className="max-w-7xl mx-auto space-y-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-7 relative z-0">
+          <div className="max-w-[1300px] mx-auto space-y-8">
             
-            {/* Gestión de Usuarios */}
+            {/* Cabecera */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[11px] font-semibold text-blue-400 uppercase tracking-widest font-mono flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                  Panel de Administración
+                </span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                Configuración y Accesos del Sistema
+              </h1>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                Administración de credenciales de colaboradores, reglas de comisión automatizadas e integraciones.
+              </p>
+            </div>
+
+            {/* Regla de Comisión por Defecto para Secretaría */}
+            <CommissionSettings initialSettings={commissionSettings} />
+
+            {/* Gestión de Usuarios y Roles */}
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
-                    Configuración y Accesos
-                  </h1>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                    Administración de credenciales, roles de usuario e integraciones externas.
+                  <h2 className="text-lg font-bold tracking-tight text-white">
+                    Colaboradores y Permisos
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Cuentas activas con acceso a la plataforma.
                   </p>
                 </div>
                 <NewUserButton />
@@ -115,6 +138,7 @@ export default async function ConfiguracionPage() {
 
             {/* Configuración de Notificaciones en Telegram */}
             <TelegramSettings initialSettings={telegramSettings} />
+
           </div>
         </main>
       </div>
