@@ -47,25 +47,25 @@
   }
 
   .dark {
-    /* Obsidiana ejecutiva & Grafito profundo */
-    --background: 225 22% 5%;       /* #090B10 */
-    --foreground: 215 25% 95%;       /* #F1F5F9 */
-    --card: 224 20% 8%;              /* #0E121B */
-    --card-foreground: 215 25% 95%;
-    --popover: 224 20% 8%;
-    --popover-foreground: 215 25% 95%;
+    /* Titanium Executive & Deep Midnight FinTech Palette */
+    --background: 224 35% 6%;       /* #090D16 */
+    --foreground: 215 25% 97%;       /* #F8FAFC */
+    --card: 224 28% 9%;              /* #0F1523 */
+    --card-foreground: 215 25% 97%;
+    --popover: 224 28% 9%;
+    --popover-foreground: 215 25% 97%;
     --primary: 217 91% 60%;          /* #3884F6 Sapphire */
     --primary-foreground: 0 0% 100%;
-    --secondary: 224 16% 12%;        /* #161B26 */
-    --secondary-foreground: 215 20% 85%;
-    --muted: 224 16% 12%;
-    --muted-foreground: 215 15% 60%; /* #8E9BAE */
-    --accent: 224 18% 14%;
-    --accent-foreground: 215 25% 95%;
+    --secondary: 224 20% 14%;        /* #182030 */
+    --secondary-foreground: 215 20% 88%;
+    --muted: 224 20% 14%;
+    --muted-foreground: 215 15% 62%; /* #94A3B8 */
+    --accent: 224 22% 16%;
+    --accent-foreground: 215 25% 97%;
     --destructive: 0 72% 51%;        /* #DC2626 */
     --destructive-foreground: 210 40% 98%;
-    --border: 224 15% 14%;           /* rgba(255, 255, 255, 0.08) */
-    --input: 224 15% 14%;
+    --border: 224 18% 16%;           /* rgba(255, 255, 255, 0.08) */
+    --input: 224 18% 16%;
     --ring: 217 91% 60%;
   }
 }
@@ -75,26 +75,26 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-[#090D16] text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1;
-    letter-spacing: -0.011em;
+    letter-spacing: -0.012em;
   }
 }
 
 /* Glassmorphism & High-End FinTech Panels */
 .glass-panel {
-  background: rgba(14, 18, 27, 0.75);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0.005) 100%), #0D1320;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
 }
 
 .glass-panel-elevated {
-  background: rgba(18, 24, 38, 0.85);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%), #111827;
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -103,15 +103,15 @@
 }
 
 .glass-card-hover:hover {
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(59, 130, 246, 0.35);
   transform: translateY(-2px);
-  box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.6), 0 0 25px -5px rgba(59, 130, 246, 0.15), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
 }
 
 /* Custom Sleek Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -124,5 +124,5 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.24);
 }
