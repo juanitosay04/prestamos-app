@@ -273,7 +273,6 @@ export async function createLoan(data: any) {
     })
 
     // Notificación / Auditoría
-    const session = await getSession()
     if (session) {
       await prisma.auditLog.create({
         data: {
