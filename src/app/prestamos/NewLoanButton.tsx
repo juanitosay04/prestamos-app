@@ -8,8 +8,24 @@ import toast from "react-hot-toast"
 
 type Client = { id: string, firstName: string, lastName: string, idDocument: string, isBlacklisted?: boolean }
 type Investor = { id: string, name: string }
+type CommissionSettingsProp = {
+  commissionType: string
+  commissionValue: number
+}
 
-export function NewLoanButton({ clients, investors, userRole }: { clients: Client[], investors: Investor[], userRole?: string }) {
+export function NewLoanButton({ 
+  clients, 
+  investors, 
+  userRole,
+  defaultCompanyCommission,
+  defaultSecretaryCommission
+}: { 
+  clients: Client[]
+  investors: Investor[]
+  userRole?: string
+  defaultCompanyCommission?: CommissionSettingsProp
+  defaultSecretaryCommission?: CommissionSettingsProp
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -24,10 +40,14 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
   
   // Commissions
   const [showCommissions, setShowCommissions] = useState(false)
-  const [companyCommissionType, setCompanyCommissionType] = useState("PERCENTAGE_INTEREST")
-  const [companyCommission, setCompanyCommission] = useState("0")
-  const [secretaryCommissionType, setSecretaryCommissionType] = useState("PERCENTAGE_INTEREST")
-  const [secretaryCommission, setSecretaryCommission] = useState("0")
+  const [companyCommissionType, setCompanyCommissionType] = useState(defaultCompanyCommission?.commissionType || "PERCENTAGE_INTEREST")
+  const [companyCommission, setCompanyCommission] = useState(
+    defaultCompanyCommission && defaultCompanyCommission.commissionValue > 0 ? String(defaultCompanyCommission.commissionValue) : "20"
+  )
+  const [secretaryCommissionType, setSecretaryCommissionType] = useState(defaultSecretaryCommission?.commissionType || "PERCENTAGE_INTEREST")
+  const [secretaryCommission, setSecretaryCommission] = useState(
+    defaultSecretaryCommission && defaultSecretaryCommission.commissionValue > 0 ? String(defaultSecretaryCommission.commissionValue) : "0"
+  )
 
   const [numberOfInstallments, setNumberOfInstallments] = useState("1")
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0])
@@ -72,25 +92,31 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
 
     // Estimate Company Commission (JyJ)
     let compCommEst = 0
-    const compVal = parseFloat(companyCommission) || 0
-    if (companyCommissionType === "FIXED_AMOUNT") {
-      compCommEst = compVal
-    } else if (companyCommissionType === "PERCENTAGE_PRINCIPAL") {
-      compCommEst = principal * (compVal / 100)
+    const rawCompVal = parseFloat(companyCommission)
+    const effectiveCompVal = !isNaN(rawCompVal) ? rawCompVal : (defaultCompanyCommission?.commissionValue ?? 20)
+    const effectiveCompType = companyCommissionType || defaultCompanyCommission?.commissionType || "PERCENTAGE_INTEREST"
+
+    if (effectiveCompType === "FIXED_AMOUNT") {
+      compCommEst = effectiveCompVal
+    } else if (effectiveCompType === "PERCENTAGE_PRINCIPAL") {
+      compCommEst = principal * (effectiveCompVal / 100)
     } else {
       // PERCENTAGE_INTEREST
-      compCommEst = totalInterest * (compVal / 100)
+      compCommEst = totalInterest * (effectiveCompVal / 100)
     }
 
     // Estimate Secretary Commission
     let secCommEst = 0
-    const secVal = parseFloat(secretaryCommission) || 0
-    if (secretaryCommissionType === "FIXED_AMOUNT") {
-      secCommEst = secVal
-    } else if (secretaryCommissionType === "PERCENTAGE_PRINCIPAL") {
-      secCommEst = principal * (secVal / 100)
+    const rawSecVal = parseFloat(secretaryCommission)
+    const effectiveSecVal = !isNaN(rawSecVal) ? rawSecVal : (defaultSecretaryCommission?.commissionValue ?? 0)
+    const effectiveSecType = secretaryCommissionType || defaultSecretaryCommission?.commissionType || "PERCENTAGE_INTEREST"
+
+    if (effectiveSecType === "FIXED_AMOUNT") {
+      secCommEst = effectiveSecVal
+    } else if (effectiveSecType === "PERCENTAGE_PRINCIPAL") {
+      secCommEst = principal * (effectiveSecVal / 100)
     } else {
-      secCommEst = totalInterest * (secVal / 100)
+      secCommEst = totalInterest * (effectiveSecVal / 100)
     }
 
     // Estimated Investor portion of interest (after company commission if applicable)
@@ -398,8 +424,15 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
                   <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-white/[0.06] animate-in fade-in duration-150">
                     {/* Comisión JyJ */}
                     <div className="space-y-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                        <Building2 className="h-3.5 w-3.5" /> Comisión Empresa (JyJ)
+                      <div className="flex items-center justify-between text-xs font-bold text-emerald-400">
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5" /> Comisión Empresa (JyJ)
+                        </div>
+                        {defaultCompanyCommission && (
+                          <span className="text-[10px] text-emerald-400/80 font-mono font-normal">
+                            (Global: {defaultCompanyCommission.commissionValue}%)
+                          </span>
+                        )}
                       </div>
                       <select
                         value={companyCommissionType}
@@ -417,7 +450,7 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
                           min="0"
                           value={companyCommission}
                           onChange={e => { setCompanyCommission(e.target.value); setPreview(null); }}
-                          placeholder="0 = Usa regla por defecto"
+                          placeholder={defaultCompanyCommission ? `Defecto: ${defaultCompanyCommission.commissionValue}` : "0"}
                           className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white font-mono focus:outline-none focus:border-emerald-500"
                         />
                         <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">
@@ -428,8 +461,15 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
 
                     {/* Comisión Secretaría */}
                     <div className="space-y-2 p-3 rounded-xl bg-blue-500/5 border border-blue-500/10">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-blue-400">
-                        <User className="h-3.5 w-3.5" /> Comisión Secretaría
+                      <div className="flex items-center justify-between text-xs font-bold text-blue-400">
+                        <div className="flex items-center gap-1.5">
+                          <User className="h-3.5 w-3.5" /> Comisión Secretaría
+                        </div>
+                        {defaultSecretaryCommission && (
+                          <span className="text-[10px] text-blue-400/80 font-mono font-normal">
+                            (Global: {defaultSecretaryCommission.commissionValue}%)
+                          </span>
+                        )}
                       </div>
                       <select
                         value={secretaryCommissionType}
@@ -447,7 +487,7 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
                           min="0"
                           value={secretaryCommission}
                           onChange={e => { setSecretaryCommission(e.target.value); setPreview(null); }}
-                          placeholder="0 = Usa regla por defecto"
+                          placeholder={defaultSecretaryCommission ? `Defecto: ${defaultSecretaryCommission.commissionValue}` : "0"}
                           className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white font-mono focus:outline-none focus:border-blue-500"
                         />
                         <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">
@@ -484,11 +524,15 @@ export function NewLoanButton({ clients, investors, userRole }: { clients: Clien
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] pt-1 font-mono">
                       <div className="bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20">
-                        <span className="text-emerald-400 block text-[10px] font-semibold">Comisión JyJ Est.:</span>
+                        <span className="text-emerald-400 block text-[10px] font-semibold">
+                          Comisión JyJ ({companyCommissionType === 'FIXED_AMOUNT' ? '$' : `${companyCommission || defaultCompanyCommission?.commissionValue || 20}%`}):
+                        </span>
                         <span className="text-white font-bold">${preview.companyCommissionEstimated.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
                       </div>
                       <div className="bg-blue-500/10 p-2 rounded-xl border border-blue-500/20">
-                        <span className="text-blue-400 block text-[10px] font-semibold">Comisión Secretaría:</span>
+                        <span className="text-blue-400 block text-[10px] font-semibold">
+                          Comisión Secretaría ({secretaryCommissionType === 'FIXED_AMOUNT' ? '$' : `${secretaryCommission || defaultSecretaryCommission?.commissionValue || 0}%`}):
+                        </span>
                         <span className="text-white font-bold">${preview.secretaryCommissionEstimated.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
                       </div>
                       {selectedInvestors.length > 0 && (

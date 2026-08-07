@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/Header"
 import { getLoans } from "@/app/actions/loan"
 import { getClients } from "@/app/actions/client"
 import { getInvestors } from "@/app/actions/investor"
+import { getCompanyCommissionSettings, getSecretaryCommissionSettings } from "@/app/actions/settings"
 import { getSession } from "@/lib/session"
 import { CheckCircle2, AlertCircle, Calendar } from "lucide-react"
 import { NewLoanButton } from "./NewLoanButton"
@@ -21,6 +22,8 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
   const allLoans = await getLoans(filterMonth, filterYear)
   const clients = await getClients()
   const investors = await getInvestors()
+  const defaultCompanyCommission = await getCompanyCommissionSettings()
+  const defaultSecretaryCommission = await getSecretaryCommissionSettings()
 
   // Format mapping for dropdowns
   const mappedClients = clients.map(c => ({
@@ -117,7 +120,13 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
               <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
                 <StatusFilter currentStatus={status} />
                 <MonthFilter />
-                <NewLoanButton clients={mappedClients} investors={mappedInvestors} userRole={role} />
+                <NewLoanButton 
+                  clients={mappedClients} 
+                  investors={mappedInvestors} 
+                  userRole={role}
+                  defaultCompanyCommission={defaultCompanyCommission}
+                  defaultSecretaryCommission={defaultSecretaryCommission}
+                />
               </div>
             </div>
 
