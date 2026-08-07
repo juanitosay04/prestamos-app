@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { 
   FileText, 
   Upload, 
@@ -40,6 +40,26 @@ export function PromissoryNoteCard({
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Manejo de tecla Escape y bloqueo de scroll cuando los modales están abiertos
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsPreviewOpen(false)
+        setIsDeleteOpen(false)
+      }
+    }
+    if (isPreviewOpen || isDeleteOpen) {
+      window.addEventListener("keydown", handleKeyDown)
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = "unset"
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      document.body.style.overflow = "unset"
+    }
+  }, [isPreviewOpen, isDeleteOpen])
 
   const isPdf = promissoryNoteUrl?.startsWith("data:application/pdf") || promissoryNoteName?.toLowerCase().endsWith(".pdf")
   const formattedDate = promissoryNoteUploadedAt 
@@ -277,54 +297,66 @@ export function PromissoryNoteCard({
 
       {/* Modal de Previsualización */}
       {isPreviewOpen && promissoryNoteUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6">
-          <div className="bg-[#0D1424] w-full max-w-4xl h-[88vh] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
-            {/* Header del Modal */}
-            <div className="flex items-center justify-between p-4 px-6 border-b border-white/10 bg-white/[0.02]">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsPreviewOpen(false)
+          }}
+          className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
+        >
+          <div className="bg-[#0A0F1D] w-full max-w-5xl h-[92vh] max-h-[92vh] sm:h-[90vh] sm:max-h-[90vh] rounded-2xl border border-white/15 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Header del Modal - Siempre Visible y Fijo Arriba */}
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-white/10 bg-[#0D1424] flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex-shrink-0">
                   <FileText className="h-4 w-4" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2 truncate">
                     Visor de Pagaré • {clientName}
                   </h3>
-                  <p className="text-xs text-muted-foreground font-mono">CC: {idDocument} | {promissoryNoteName}</p>
+                  <p className="text-[11px] text-muted-foreground font-mono truncate">
+                    CC: {idDocument} • {promissoryNoteName || "Pagaré Digital"}
+                  </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                 <a
                   href={promissoryNoteUrl}
                   download={promissoryNoteName || `pagare_${idDocument}.pdf`}
-                  className="h-8 px-3 bg-white/[0.06] hover:bg-white/[0.12] text-white border border-white/[0.08] rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1.5 shadow-sm"
+                  className="h-9 px-3.5 bg-white/[0.06] hover:bg-white/[0.12] text-white border border-white/[0.08] rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1.5 shadow-sm active:scale-95"
                 >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Descargar</span>
+                  <Download className="h-3.5 w-3.5 text-blue-400" />
+                  <span className="hidden sm:inline">Descargar</span>
                 </a>
+                
                 <button
                   onClick={() => setIsPreviewOpen(false)}
-                  className="h-8 w-8 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-white flex items-center justify-center transition-colors"
+                  className="h-9 px-3.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 border border-rose-500/30 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 active:scale-95 shadow-sm"
+                  title="Cerrar visor (Esc)"
                 >
                   <X className="h-4 w-4" />
+                  <span>Cerrar</span>
                 </button>
               </div>
             </div>
 
             {/* Cuerpo del Visor */}
-            <div className="flex-1 bg-black/40 overflow-auto p-4 flex items-center justify-center">
+            <div className="flex-1 min-h-0 bg-[#050811] p-2 sm:p-4 flex items-center justify-center overflow-hidden relative">
               {isPdf ? (
                 <iframe
                   src={promissoryNoteUrl}
                   title="Visor Pagaré PDF"
-                  className="w-full h-full rounded-xl border border-white/10 shadow-inner bg-white"
+                  className="w-full h-full rounded-xl border border-white/10 shadow-2xl bg-white"
                 />
               ) : (
-                <img
-                  src={promissoryNoteUrl}
-                  alt="Pagaré Firmado"
-                  className="max-h-full max-w-full object-contain rounded-xl shadow-2xl border border-white/10"
-                />
+                <div className="w-full h-full flex items-center justify-center overflow-auto p-2">
+                  <img
+                    src={promissoryNoteUrl}
+                    alt="Pagaré Firmado"
+                    className="max-h-full max-w-full object-contain rounded-xl shadow-2xl border border-white/10"
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -333,8 +365,13 @@ export function PromissoryNoteCard({
 
       {/* Modal de Confirmación de Eliminación */}
       {isDeleteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="bg-[#0D1424] w-full max-w-md rounded-2xl border border-rose-500/20 shadow-2xl p-6 space-y-4">
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsDeleteOpen(false)
+          }}
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
+        >
+          <div className="bg-[#0D1424] w-full max-w-md rounded-2xl border border-rose-500/20 shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 text-rose-400">
               <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20">
                 <AlertCircle className="h-6 w-6" />
