@@ -3,10 +3,10 @@
 import { prisma } from "@/lib/prisma"
 import { addDays, addWeeks, addMonths } from "date-fns"
 import { revalidatePath } from "next/cache"
-import { getSession } from "@/lib/session"
+import { getSession, getCurrentUserSummary } from "@/lib/session"
 import { generateSecretaryCommissionExpense } from "./payment"
 import { getSecretaryCommissionSettings, getCompanyCommissionSettings } from "./settings"
-import { notifyLoanCreated, notifyLoanRefinanced, notifyLoanDefaulted, notifyPrincipalPayment } from "@/lib/telegram"
+import { notifyLoanCreated, notifyLoanRefinanced, notifyLoanDefaulted, notifyPrincipalPayment, notifyLoanRevived } from "@/lib/telegram"
 
 export async function getLoans(month?: number, year?: number) {
   try {
@@ -68,10 +68,12 @@ export async function markLoanAsDefaulted(loanId: string) {
       })
 
       // Notificación Telegram
+      const operator = await getCurrentUserSummary()
       notifyLoanDefaulted({
         loanId: loan.id,
         clientName: `${loan.client.firstName} ${loan.client.lastName}`,
-        principalAmount: loan.principalAmount
+        principalAmount: loan.principalAmount,
+        performedBy: operator.label
       }).catch(err => console.error("Telegram notifyLoanDefaulted error:", err))
     }
 
@@ -109,6 +111,24 @@ export async function reviveLoan(loanId: string) {
     
     if (hasOverdue) {
       await prisma.loan.update({ where: { id: loanId }, data: { status: "OVERDUE" } })
+    }
+
+    // Notificación Telegram
+    try {
+      const operator = await getCurrentUserSummary()
+      const loan = await prisma.loan.findUnique({
+        where: { id: loanId },
+        include: { client: true }
+      })
+      if (loan) {
+        notifyLoanRevived({
+          loanId: loan.id,
+          clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+          performedBy: operator.label
+        }).catch(err => console.error("Telegram notifyLoanRevived error:", err))
+      }
+    } catch (telErr) {
+      console.error("Telegram reviveLoan error:", telErr)
     }
 
     revalidatePath(`/prestamos/${loanId}`)
@@ -305,6 +325,7 @@ export async function createLoan(data: any) {
 
     // Notificación en Telegram para colaboradores
     try {
+      const operator = await getCurrentUserSummary()
       const clientInfo = await prisma.client.findUnique({ where: { id: clientId } })
       if (clientInfo) {
         const clientName = `${clientInfo.firstName} ${clientInfo.lastName}`
@@ -318,7 +339,8 @@ export async function createLoan(data: any) {
             newPrincipal: loan.principalAmount,
             numberOfInstallments: loan.numberOfInstallments,
             installmentAmount: loan.installmentAmount,
-            interestType: loan.interestType
+            interestType: loan.interestType,
+            performedBy: operator.label
           }).catch(err => console.error("Telegram refinance notification error:", err))
         } else {
           let investorsSummary = "Fondeo Propio"
@@ -336,7 +358,8 @@ export async function createLoan(data: any) {
             numberOfInstallments: loan.numberOfInstallments,
             installmentAmount: loan.installmentAmount,
             interestType: loan.interestType,
-            investorsSummary
+            investorsSummary,
+            performedBy: operator.label
           }).catch(err => console.error("Telegram new loan notification error:", err))
         }
       }
@@ -584,6 +607,7 @@ export async function registerPrincipalPayment(
 
     // Notificación Telegram
     try {
+      const operator = await getCurrentUserSummary()
       const loanData = await prisma.loan.findUnique({
         where: { id: loanId },
         include: { client: true, installments: { where: { status: "PENDING" } } }
@@ -595,7 +619,8 @@ export async function registerPrincipalPayment(
           clientName: `${loanData.client.firstName} ${loanData.client.lastName}`,
           amountPaid: amountInCents,
           remainingPrincipal: remainingP,
-          isFullyPaid: loanData.status === "PAID" || remainingP === 0
+          isFullyPaid: loanData.status === "PAID" || remainingP === 0,
+          performedBy: operator.label
         }).catch(err => console.error("Telegram principal payment notification error:", err))
       }
     } catch (telErr) {

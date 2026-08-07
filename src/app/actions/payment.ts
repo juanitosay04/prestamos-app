@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { notifyPaymentReceived, notifyBatchPayments } from "@/lib/telegram"
+import { getCurrentUserSummary } from "@/lib/session"
 
 export async function payInstallment(installmentId: string, lateFeeInCents: number = 0, amountPaidInCents?: number) {
   try {
@@ -81,6 +82,7 @@ export async function payInstallment(installmentId: string, lateFeeInCents: numb
 
     // Notificación Telegram
     try {
+      const operator = await getCurrentUserSummary()
       const loanInfo = await prisma.loan.findUnique({
         where: { id: installment.loanId },
         include: {
@@ -102,7 +104,8 @@ export async function payInstallment(installmentId: string, lateFeeInCents: numb
           amountPaid: paymentAmount,
           lateFee: lateFeeInCents,
           remainingLoanBalance: remainingBalance,
-          isFullyPaid: remainingBalance === 0
+          isFullyPaid: remainingBalance === 0,
+          performedBy: operator.label
         }).catch(err => console.error("Telegram payment notification error:", err))
       }
     } catch (telErr) {
@@ -283,6 +286,7 @@ export async function processBatchInstallments(loanIds: string[]) {
 
     // Notificación Telegram para recaudo masivo
     try {
+      const operator = await getCurrentUserSummary()
       const successful = results.filter(r => r.success)
       if (successful.length > 0) {
         const totalAmount = successful.reduce((sum, r) => sum + (r.amountPaid || 0), 0)
@@ -290,7 +294,8 @@ export async function processBatchInstallments(loanIds: string[]) {
         notifyBatchPayments({
           processedCount: successful.length,
           totalAmount,
-          clients: clientNames
+          clients: clientNames,
+          performedBy: operator.label
         }).catch(err => console.error("Telegram batch payment notification error:", err))
       }
     } catch (telErr) {

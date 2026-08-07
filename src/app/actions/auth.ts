@@ -44,6 +44,7 @@ export async function login(formData: FormData) {
 
   const sessionData = {
     userId: user.id,
+    name: user.name,
     email: user.email,
     role: user.role,
   }

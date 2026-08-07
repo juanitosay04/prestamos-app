@@ -52,6 +52,7 @@ export async function notifyLoanCreated(data: {
   installmentAmount: number
   interestType: string
   investorsSummary?: string
+  performedBy?: string
 }) {
   const periodicityMap: Record<string, string> = {
     DAILY: "Diario",
@@ -68,6 +69,7 @@ export async function notifyLoanCreated(data: {
     `📅 <b>Modalidad:</b> ${periodicity} (${data.numberOfInstallments} cuotas)\n` +
     `💵 <b>Valor Cuota:</b> ${formatMoney(data.installmentAmount)}\n` +
     `🤝 <b>Fondeo:</b> ${data.investorsSummary || "Fondeo Propio"}\n` +
+    (data.performedBy ? `✍️ <b>Registrado por:</b> ${data.performedBy}\n` : "") +
     `🆔 <b>ID:</b> <code>${data.loanId}</code>\n\n` +
     `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
 
@@ -86,6 +88,7 @@ export async function notifyLoanRefinanced(data: {
   numberOfInstallments: number
   installmentAmount: number
   interestType: string
+  performedBy?: string
 }) {
   const periodicityMap: Record<string, string> = {
     DAILY: "Diario",
@@ -100,6 +103,7 @@ export async function notifyLoanRefinanced(data: {
     `📊 <b>Saldo Insoluto Anterior:</b> ${formatMoney(data.oldOutstandingPrincipal)}\n` +
     `💰 <b>Nuevo Capital Total:</b> ${formatMoney(data.newPrincipal)}\n` +
     `📅 <b>Nuevo Plan:</b> ${data.numberOfInstallments} cuotas ${periodicity} de ${formatMoney(data.installmentAmount)}\n` +
+    (data.performedBy ? `🔄 <b>Refinanciado por:</b> ${data.performedBy}\n` : "") +
     `🔗 <b>Préstamo Anterior:</b> <code>${data.oldLoanId}</code>\n` +
     `✨ <b>Nuevo Préstamo:</b> <code>${data.newLoanId}</code>\n\n` +
     `⏱️ <i>Refinanciado el ${new Date().toLocaleString("es-CO")}</i>`
@@ -119,6 +123,7 @@ export async function notifyPaymentReceived(data: {
   lateFee: number
   remainingLoanBalance: number
   isFullyPaid: boolean
+  performedBy?: string
 }) {
   let statusText = data.isFullyPaid 
     ? `🎉 <b>¡PRÉSTAMO TOTALMENTE PAGADO Y LIQUIDADO!</b>` 
@@ -130,6 +135,7 @@ export async function notifyPaymentReceived(data: {
     (data.lateFee > 0 ? `⚠️ <b>Mora Cobrada:</b> ${formatMoney(data.lateFee)}\n` : "") +
     `📌 <b>Estado:</b> ${statusText}\n` +
     `📉 <b>Saldo Restante Estimado:</b> ${formatMoney(data.remainingLoanBalance)}\n` +
+    (data.performedBy ? `👤 <b>Cobrado por:</b> ${data.performedBy}\n` : "") +
     `🆔 <b>Préstamo:</b> <code>${data.loanId}</code>\n\n` +
     `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
 
@@ -143,6 +149,7 @@ export async function notifyBatchPayments(data: {
   processedCount: number
   totalAmount: number
   clients: string[]
+  performedBy?: string
 }) {
   const clientList = data.clients.slice(0, 5).map(c => `• ${c}`).join("\n")
   const moreText = data.clients.length > 5 ? `\n• ... y ${data.clients.length - 5} más` : ""
@@ -150,6 +157,7 @@ export async function notifyBatchPayments(data: {
   const message = `📦 <b>RECAUDO MASIVO PROCESADO</b>\n\n` +
     `📋 <b>Cuotas Cobradas:</b> ${data.processedCount} cuotas\n` +
     `💰 <b>Total Recaudado:</b> ${formatMoney(data.totalAmount)}\n` +
+    (data.performedBy ? `👤 <b>Operado / Cobrado por:</b> ${data.performedBy}\n` : "") +
     `👥 <b>Clientes:\n</b>${clientList}${moreText}\n\n` +
     `⏱️ <i>Procesado el ${new Date().toLocaleString("es-CO")}</i>`
 
@@ -165,11 +173,13 @@ export async function notifyPrincipalPayment(data: {
   amountPaid: number
   remainingPrincipal: number
   isFullyPaid: boolean
+  performedBy?: string
 }) {
   const message = `🏦 <b>ABONO DIRECTO A CAPITAL</b>\n\n` +
     `👤 <b>Cliente:</b> ${data.clientName}\n` +
     `💰 <b>Abono a Capital:</b> ${formatMoney(data.amountPaid)}\n` +
     `📉 <b>Capital Insoluto Restante:</b> ${formatMoney(data.remainingPrincipal)}\n` +
+    (data.performedBy ? `👤 <b>Cobrado / Registrado por:</b> ${data.performedBy}\n` : "") +
     (data.isFullyPaid ? `🎉 <b>¡PRÉSTAMO LIQUIDADO AL 100%!</b>\n` : "") +
     `🆔 <b>Préstamo:</b> <code>${data.loanId}</code>\n\n` +
     `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
@@ -184,12 +194,31 @@ export async function notifyLoanDefaulted(data: {
   loanId: string
   clientName: string
   principalAmount: number
+  performedBy?: string
 }) {
   const message = `🚨 <b>ALERTA: PRÉSTAMO DECLARADO EN PÉRDIDA</b>\n\n` +
     `👤 <b>Cliente:</b> ${data.clientName}\n` +
     `💥 <b>Capital Original:</b> ${formatMoney(data.principalAmount)}\n` +
+    (data.performedBy ? `⚠️ <b>Marcado por:</b> ${data.performedBy}\n` : "") +
     `🆔 <b>ID Préstamo:</b> <code>${data.loanId}</code>\n\n` +
     `⚠️ <i>Marcado como cartera en pérdida el ${new Date().toLocaleString("es-CO")}</i>`
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * ✨ Notificación de Préstamo Reactivado
+ */
+export async function notifyLoanRevived(data: {
+  loanId: string
+  clientName: string
+  performedBy?: string
+}) {
+  const message = `✨ <b>PRÉSTAMO REACTIVADO</b>\n\n` +
+    `👤 <b>Cliente:</b> ${data.clientName}\n` +
+    (data.performedBy ? `👤 <b>Reactivado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>ID Préstamo:</b> <code>${data.loanId}</code>\n\n` +
+    `⏱️ <i>Reactivado el ${new Date().toLocaleString("es-CO")}</i>`
 
   return sendTelegramMessage(message)
 }
