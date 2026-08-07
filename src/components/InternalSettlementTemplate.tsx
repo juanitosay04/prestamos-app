@@ -79,7 +79,7 @@ export const InternalSettlementTemplate = forwardRef<HTMLDivElement, { data: Int
   const totalAbonosCents = data.principalPayments.reduce((s, p) => s + p.amount, 0)
 
   return (
-    <div className={isPreview ? "w-full flex justify-center" : "hidden"}>
+    <div className={isPreview ? "w-full flex justify-center" : "w-full flex justify-center print:block"}>
       <div 
         ref={ref} 
         className="w-[820px] min-h-[1100px] bg-white text-slate-900 font-sans p-8 relative box-border print:p-6 print:m-0 print:w-full print:shadow-none shadow-2xl mx-auto flex flex-col justify-between"

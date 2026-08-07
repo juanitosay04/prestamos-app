@@ -1,9 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { Briefcase, Calendar, FileDown, Printer, Loader2, Check, ShieldAlert, ChevronRight, User, FileCheck, FileText } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
+import { Briefcase, Calendar, FileDown, Printer, Loader2, Check, ShieldAlert, ChevronRight, User, FileCheck, FileText, FileSpreadsheet, X, MessageSquare, Download, ChevronLeft, Building2, Users } from "lucide-react"
 import Link from "next/link"
 import { processBatchInstallments, getBatchInstallmentsInfo } from "@/app/actions/payment"
+import { getInternalSettlementData } from "@/app/actions/loan"
+import { InternalSettlementTemplate, InternalSettlementData } from "@/components/InternalSettlementTemplate"
+import { useReactToPrint } from "react-to-print"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -12,6 +16,47 @@ type Loan = any
 export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userRole?: string }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  
+  // Estado para el Modal de Liquidación Interna
+  const [settlementModalOpen, setSettlementModalOpen] = useState(false)
+  const [settlementDataList, setSettlementDataList] = useState<InternalSettlementData[]>([])
+  const [currentSettlementIndex, setCurrentSettlementIndex] = useState(0)
+
+  const printSingleRef = useRef<HTMLDivElement>(null)
+  const printBatchRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSettlementModalOpen(false)
+    }
+    if (settlementModalOpen) {
+      window.addEventListener("keydown", handleKeyDown)
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = "unset"
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      document.body.style.overflow = "unset"
+    }
+  }, [settlementModalOpen])
+
+  const handlePrintSingle = useReactToPrint({
+    contentRef: printSingleRef,
+    documentTitle: settlementDataList[currentSettlementIndex] 
+      ? `Liquidacion_Interna_${settlementDataList[currentSettlementIndex].clientName.replace(/\s+/g, "_")}_${settlementDataList[currentSettlementIndex].loanId.slice(-6).toUpperCase()}`
+      : "Liquidacion_Interna"
+  })
+
+  const handlePrintBatch = useReactToPrint({
+    contentRef: printBatchRef,
+    documentTitle: `Liquidacion_Interna_Lote_${settlementDataList.length}_Prestamos_${new Date().getTime()}`
+  })
 
   const toggleSelection = (id: string) => {
     if (selectedIds.includes(id)) {
@@ -32,7 +77,49 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     }
   }
 
+  const handleWhatsAppShare = (item: InternalSettlementData) => {
+    const abonosCount = item.principalPayments.length
+    const totalAbonos = item.principalPayments.reduce((s, p) => s + p.amount, 0)
+    
+    let invText = item.investorsSummary.map(inv => 
+      `• *${inv.name}* (${inv.percentage}%): Total Liquidado: $${(inv.totalLiquidated / 100).toLocaleString('es-CO')} | Cap. Devuelto: $${(inv.totalPrincipalReturned / 100).toLocaleString('es-CO')} | Rendimiento: $${(inv.interestEarned / 100).toLocaleString('es-CO')}`
+    ).join("\n")
+
+    const message = encodeURIComponent(
+      `📊 *RESUMEN DE LIQUIDACIÓN INTERNA JYJ*\n` +
+      `Préstamo: *#${item.loanId.slice(-6).toUpperCase()}*\n` +
+      `Cliente: *${item.clientName}* (CC: ${item.idDocument})\n` +
+      `Estado: *${item.status}*\n\n` +
+      `💰 *Capital Inicial:* $${(item.principalAmount / 100).toLocaleString('es-CO')}\n` +
+      `📈 *Total Recaudado:* $${(item.totalPaid / 100).toLocaleString('es-CO')}\n` +
+      `⚡ *Abonos a Capital:* ${abonosCount} abono(s) por $${(totalAbonos / 100).toLocaleString('es-CO')}\n\n` +
+      `👥 *REPARTICIÓN POR INVERSIONISTA:*\n${invText}\n\n` +
+      `_Generado por Sistema Préstamos JyJ_`
+    )
+    window.open(`https://wa.me/?text=${message}`, "_blank")
+  }
+
   const handleAction = async (mode: "CLIENT_PDF" | "CLIENT_PAY" | "INTERNAL_REPORT") => {
+    if (mode === "INTERNAL_REPORT") {
+      setLoading(true)
+      const res = await getInternalSettlementData(selectedIds)
+      setLoading(false)
+
+      if (res.error) {
+        alert(res.error)
+        return
+      }
+
+      if (res.data && res.data.length > 0) {
+        setSettlementDataList(res.data)
+        setCurrentSettlementIndex(0)
+        setSettlementModalOpen(true)
+      } else {
+        alert("No se encontró información de liquidación para los préstamos seleccionados.")
+      }
+      return
+    }
+
     if (mode === "CLIENT_PAY") {
       if (!confirm(`¿Estás seguro de procesar el cobro de la cuota actual para los ${selectedIds.length} préstamos seleccionados?`)) {
         return
@@ -52,11 +139,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     if (res.results) {
       const successfulPayments = res.results.filter((r: any) => r.success)
       if (successfulPayments.length > 0) {
-        if (mode === "INTERNAL_REPORT") {
-          generateInternalSettlementPDF(successfulPayments)
-        } else {
-          generateClientReceiptsPDF(successfulPayments, mode === "CLIENT_PDF")
-        }
+        generateClientReceiptsPDF(successfulPayments, mode === "CLIENT_PDF")
 
         if (isPayment) {
           setSelectedIds([])
@@ -457,17 +540,15 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
               PDF Clientes
             </button>
 
-            {userRole === "ADMIN" && (
-              <button 
-                onClick={() => handleAction("INTERNAL_REPORT")}
-                disabled={loading}
-                className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 border border-purple-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 disabled:opacity-50 active:scale-95"
-                title="Descarga informe administrativo con comisiones y rentabilidad"
-              >
-                <ShieldAlert className="h-3.5 w-3.5 text-purple-400" />
-                Liquidación Interna
-              </button>
-            )}
+            <button 
+              onClick={() => handleAction("INTERNAL_REPORT")}
+              disabled={loading}
+              className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 border border-purple-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 disabled:opacity-50 active:scale-95 shadow-sm hover:border-purple-500/50"
+              title="Descarga o previsualiza informe administrativo con comisiones y rentabilidad"
+            >
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5 text-purple-400" />}
+              Liquidación Interna
+            </button>
 
             <button 
               onClick={() => handleAction("CLIENT_PAY")}
@@ -477,6 +558,133 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
               Cobrar y Recibo
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Liquidación Interna Ejecutiva */}
+      {mounted && settlementModalOpen && settlementDataList.length > 0 && createPortal(
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSettlementModalOpen(false)
+          }}
+          className="fixed inset-0 z-[999999] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+        >
+          <div className="bg-[#0A0F1D] w-full max-w-5xl h-[94vh] max-h-[94vh] rounded-2xl border border-white/20 shadow-[0_25px_70px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            
+            {/* Header del Modal */}
+            <div className="flex flex-col gap-2 px-4 sm:px-6 py-3.5 border-b border-white/15 bg-[#0D1424] flex-shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex-shrink-0">
+                    <FileSpreadsheet className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2 truncate">
+                      Planilla de Liquidación Interna & Repartición
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground font-mono truncate">
+                      {settlementDataList[currentSettlementIndex]?.clientName} • Ref: LIQ-{settlementDataList[currentSettlementIndex]?.loanId.slice(-6).toUpperCase()} • ${(settlementDataList[currentSettlementIndex]?.principalAmount / 100).toLocaleString('es-CO')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Acciones del Header */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => handleWhatsAppShare(settlementDataList[currentSettlementIndex])}
+                    className="h-9 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 active:scale-95 shadow-sm"
+                    title="Compartir resumen por WhatsApp"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">WhatsApp</span>
+                  </button>
+
+                  <button
+                    onClick={() => handlePrintSingle()}
+                    className="h-9 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-lg shadow-purple-600/20 active:scale-95"
+                    title="Imprimir o guardar PDF del préstamo actual"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    <span>{settlementDataList.length > 1 ? "Imprimir Este" : "Imprimir / Guardar PDF"}</span>
+                  </button>
+
+                  {settlementDataList.length > 1 && (
+                    <button
+                      onClick={() => handlePrintBatch()}
+                      className="h-9 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-95"
+                      title="Imprimir todos los préstamos seleccionados en lote"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      <span>Imprimir Todo ({settlementDataList.length})</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setSettlementModalOpen(false)}
+                    className="h-9 w-9 bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white rounded-xl flex items-center justify-center transition-all border border-white/10 active:scale-95 ml-1"
+                    title="Cerrar vista previa (Esc)"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Selector de Pestañas si se seleccionaron múltiples préstamos */}
+              {settlementDataList.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-0.5 border-t border-white/10">
+                  <span className="text-[10px] text-muted-foreground font-mono mr-1">Préstamos:</span>
+                  {settlementDataList.map((item, idx) => (
+                    <button
+                      key={item.loanId || idx}
+                      onClick={() => setCurrentSettlementIndex(idx)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                        currentSettlementIndex === idx
+                          ? "bg-purple-600 text-white shadow-md shadow-purple-500/30 border border-purple-400/30"
+                          : "bg-white/5 text-muted-foreground hover:text-white hover:bg-white/10 border border-white/5"
+                      }`}
+                    >
+                      <span>{idx + 1}. {item.clientName}</span>
+                      <span className="text-[10px] opacity-75 font-mono">(${(item.principalAmount / 100).toLocaleString('es-CO')})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Vista Previa del Documento */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950/60 flex justify-center items-start">
+              {settlementDataList[currentSettlementIndex] && (
+                <InternalSettlementTemplate 
+                  data={settlementDataList[currentSettlementIndex]} 
+                  isPreview={true} 
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Contenedor Oculto para Impresión de Préstamo Individual */}
+          <div style={{ position: "fixed", top: "-99999px", left: "-99999px", opacity: 0, pointerEvents: "none" }}>
+            {settlementDataList[currentSettlementIndex] && (
+              <div ref={printSingleRef}>
+                <InternalSettlementTemplate 
+                  data={settlementDataList[currentSettlementIndex]} 
+                  isPreview={false} 
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Contenedor Oculto para Impresión de Lote Completo */}
+          <div style={{ position: "fixed", top: "-99999px", left: "-99999px", opacity: 0, pointerEvents: "none" }}>
+            <div ref={printBatchRef}>
+              {settlementDataList.map((item, idx) => (
+                <div key={item.loanId || idx} style={{ pageBreakAfter: idx < settlementDataList.length - 1 ? "always" : "auto", breakAfter: idx < settlementDataList.length - 1 ? "page" : "auto" }}>
+                  <InternalSettlementTemplate data={item} isPreview={false} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
