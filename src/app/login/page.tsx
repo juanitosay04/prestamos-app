@@ -32,10 +32,12 @@ export default function LoginPage() {
         
         {/* Logo & Brand Header */}
         <div className="text-center mb-8">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-400 p-[1.5px] mx-auto mb-5 shadow-2xl shadow-blue-500/20">
-            <div className="h-full w-full bg-[#0A0D14] rounded-[14px] flex items-center justify-center">
-              <ShieldCheck className="h-8 w-8 text-blue-400" />
-            </div>
+          <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-400 p-[1.5px] mx-auto mb-5 shadow-2xl shadow-blue-500/25 overflow-hidden">
+            <img 
+              src="/logo.png" 
+              alt="JyJ Logo" 
+              className="h-full w-full object-cover rounded-[14px]" 
+            />
           </div>
           
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">

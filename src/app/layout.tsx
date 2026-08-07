@@ -11,6 +11,11 @@ export const metadata: Metadata = {
     template: "%s | Préstamos JyJ"
   },
   description: "Plataforma ejecutiva de administración de préstamos e inversiones JyJ",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png"
+  }
 };
 
 export default function RootLayout({

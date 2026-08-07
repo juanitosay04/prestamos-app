@@ -68,10 +68,12 @@ export function Sidebar({ role }: { role?: string }) {
         <div className="flex h-20 items-center justify-between px-6 border-b border-white/[0.06]">
           <Link href="/" className="flex items-center gap-3.5 group">
             <div className="relative">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-400 p-[1px] shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/30 transition-all duration-300">
-                <div className="h-full w-full bg-[#0A0D14] rounded-[11px] flex items-center justify-center">
-                  <ShieldCheck className="h-5 w-5 text-blue-400 group-hover:text-blue-300 transition-colors" />
-                </div>
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-400 p-[1px] shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-all duration-300 overflow-hidden">
+                <img 
+                  src="/logo.png" 
+                  alt="JyJ Logo" 
+                  className="h-full w-full object-cover rounded-[10px]" 
+                />
               </div>
             </div>
             
