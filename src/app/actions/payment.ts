@@ -351,7 +351,14 @@ export async function getBatchInstallmentsInfo(loanIds: string[]) {
           secCommAmount = Math.round(totalInterest * (installment.loan.secretaryCommission / 100))
         }
 
-        const jyjPlatformFee = Math.round(totalInterest * 0.20)
+        let jyjPlatformFee = 0
+        if (installment.loan.companyCommissionType === "FIXED_AMOUNT") {
+          jyjPlatformFee = Math.round(installment.loan.companyCommission / installment.loan.numberOfInstallments)
+        } else if (installment.loan.companyCommissionType === "PERCENTAGE_PRINCIPAL") {
+          jyjPlatformFee = Math.round((installment.loan.principalAmount * (installment.loan.companyCommission / 100)) / installment.loan.numberOfInstallments)
+        } else {
+          jyjPlatformFee = Math.round(totalInterest * ((installment.loan.companyCommission || 0) / 100))
+        }
         const referralFee = referredByInvestorName ? Math.round(totalInterest * 0.03) : 0
         const remainingInterest = Math.max(0, totalInterest - secCommAmount - jyjPlatformFee - referralFee)
 

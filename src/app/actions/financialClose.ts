@@ -96,7 +96,14 @@ async function executeClosure(monthIndex: number, year: number, descriptionTag: 
       secretaryCommissionAmount = Math.round(totalInterest * ((payment.loan.secretaryCommission || 0) / 100))
     }
 
-    const jyjCommissionAmount = Math.round(totalInterest * 0.20) // Fijo JyJ 20%
+    let jyjCommissionAmount = 0
+    if (payment.loan.companyCommissionType === "FIXED_AMOUNT") {
+      jyjCommissionAmount = Math.round(payment.loan.companyCommission / payment.loan.numberOfInstallments)
+    } else if (payment.loan.companyCommissionType === "PERCENTAGE_PRINCIPAL") {
+      jyjCommissionAmount = Math.round((payment.loan.principalAmount * (payment.loan.companyCommission / 100)) / payment.loan.numberOfInstallments)
+    } else {
+      jyjCommissionAmount = Math.round(totalInterest * ((payment.loan.companyCommission || 0) / 100))
+    }
     
     const remainingInterest = Math.max(0, totalInterest - secretaryCommissionAmount - jyjCommissionAmount)
     

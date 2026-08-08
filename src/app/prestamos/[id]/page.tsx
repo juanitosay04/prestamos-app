@@ -126,7 +126,15 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
     } else {
       secComm = Math.round(totalInstInterest * (loan.secretaryCommission / 100))
     }
-    const jyjComm = Math.round(totalInstInterest * 0.20)
+    let jyjComm = 0
+    if (loan.companyCommissionType === "FIXED_AMOUNT") {
+      jyjComm = Math.round(loan.companyCommission / (loan.numberOfInstallments || 1))
+    } else if (loan.companyCommissionType === "PERCENTAGE_PRINCIPAL") {
+      jyjComm = Math.round((loan.principalAmount * (loan.companyCommission / 100)) / (loan.numberOfInstallments || 1))
+    } else {
+      jyjComm = Math.round(totalInstInterest * (loan.companyCommission / 100))
+    }
+
     const refComm = loan.referredByInvestorId ? Math.round(totalInstInterest * 0.03) : 0
 
     secretaryCommissionTotal += secComm
