@@ -708,7 +708,8 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Tabla Principal */}
