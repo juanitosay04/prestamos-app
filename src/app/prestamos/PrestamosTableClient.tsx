@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import { Briefcase, Calendar, FileDown, Printer, Loader2, Check, ShieldAlert, ChevronRight, User, FileCheck, FileText, FileSpreadsheet, X, MessageSquare, Download, ChevronLeft, Building2, Users } from "lucide-react"
 import Link from "next/link"
 import { processBatchInstallments, getBatchInstallmentsInfo } from "@/app/actions/payment"
-import { getInternalSettlementData } from "@/app/actions/loan"
+import { getInternalSettlementData, getBatchInstallmentBreakdown } from "@/app/actions/loan"
 import { InternalSettlementTemplate, InternalSettlementData } from "@/components/InternalSettlementTemplate"
 import { useReactToPrint } from "react-to-print"
 import jsPDF from "jspdf"
@@ -22,6 +22,11 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
   const [settlementModalOpen, setSettlementModalOpen] = useState(false)
   const [settlementDataList, setSettlementDataList] = useState<InternalSettlementData[]>([])
   const [currentSettlementIndex, setCurrentSettlementIndex] = useState(0)
+
+  // Estado para el Modal de Desglose de Pago (Inversionistas)
+  const [breakdownModalOpen, setBreakdownModalOpen] = useState(false)
+  const [breakdownData, setBreakdownData] = useState<{ loansBreakdown: any[], consolidatedPayouts: any[] } | null>(null)
+  const [breakdownActiveTab, setBreakdownActiveTab] = useState<"consolidated" | "details">("consolidated")
 
   const printSingleRef = useRef<HTMLDivElement>(null)
   const printBatchRef = useRef<HTMLDivElement>(null)
@@ -43,11 +48,22 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     }, 250) // pequeño delay para que la animacion de salida se complete
   }
 
+  const closeBreakdownModal = () => {
+    setBreakdownModalOpen(false)
+    setTimeout(() => {
+      setBreakdownData(null)
+      setBreakdownActiveTab("consolidated")
+    }, 250)
+  }
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeModal()
+      if (e.key === "Escape") {
+        closeModal()
+        closeBreakdownModal()
+      }
     }
-    if (settlementModalOpen) {
+    if (settlementModalOpen || breakdownModalOpen) {
       window.addEventListener("keydown", handleKeyDown)
       document.body.style.overflow = "hidden"
     } else {
@@ -57,7 +73,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
       window.removeEventListener("keydown", handleKeyDown)
       document.body.style.overflow = "unset"
     }
-  }, [settlementModalOpen])
+  }, [settlementModalOpen, breakdownModalOpen])
 
   const handlePrintSingle = useReactToPrint({
     contentRef: printSingleRef,
@@ -115,7 +131,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     window.open(`https://wa.me/?text=${message}`, "_blank")
   }
 
-  const handleAction = async (mode: "CLIENT_PDF" | "CLIENT_PAY" | "INTERNAL_REPORT") => {
+  const handleAction = async (mode: "CLIENT_PDF" | "CLIENT_PAY" | "INTERNAL_REPORT" | "PAYOUT_BREAKDOWN") => {
     if (mode === "INTERNAL_REPORT") {
       try {
         setLoading(true)
@@ -138,6 +154,31 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
         setLoading(false)
         console.error("Error al cargar liquidación interna:", err)
         alert("Ocurrió un error al procesar la liquidación interna: " + (err?.message || err))
+      }
+      return
+    }
+
+    if (mode === "PAYOUT_BREAKDOWN") {
+      try {
+        setLoading(true)
+        const res = await getBatchInstallmentBreakdown(selectedIds)
+        setLoading(false)
+
+        if (res.error) {
+          alert(res.error)
+          return
+        }
+
+        if (res.data && res.data.loansBreakdown.length > 0) {
+          setBreakdownData(res.data)
+          setBreakdownModalOpen(true)
+        } else {
+          alert("Ninguno de los préstamos seleccionados tiene cuotas pagadas para desglosar.")
+        }
+      } catch (err: any) {
+        setLoading(false)
+        console.error("Error al generar desglose de cuotas:", err)
+        alert("Ocurrió un error al procesar el desglose de cuotas: " + (err?.message || err))
       }
       return
     }
@@ -536,6 +577,156 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     doc.save(`Liquidacion_Interna_JyJ_${new Date().getTime()}.pdf`)
   }
 
+  const handleWhatsAppBreakdown = (data: any) => {
+    if (!data) return
+    let text = `📊 *DESGLOSE MASIVO DE RENTABILIDAD Y PAGOS - JYJ*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Resumen de cobros de las últimas cuotas pagadas para los préstamos seleccionados.\n\n` +
+      `💵 *CONSOLIDADO DE TRANSFERENCIAS:*\n`
+    
+    data.consolidatedPayouts.forEach((p: any) => {
+      text += `👤 *${p.name}*: $${(p.amount / 100).toLocaleString('es-CO')} netos\n`
+    })
+
+    text += `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      `📂 *DETALLE POR DEUDOR:*\n`
+
+    data.loansBreakdown.forEach((l: any) => {
+      text += `• *${l.clientName}* (Cta #${l.installmentNumber}):\n` +
+        `  - Recaudado: $${(l.amountPaid / 100).toLocaleString('es-CO')}\n` +
+        `  - Abono Capital: $${(l.principalPart / 100).toLocaleString('es-CO')}\n` +
+        `  - Comisión JyJ: $${(l.companyCommission / 100).toLocaleString('es-CO')}\n`
+      if (l.investorsBreakdown.length > 0) {
+        text += `  - Distribución Inversionistas:\n`
+        l.investorsBreakdown.forEach((inv: any) => {
+          text += `    ↳ ${inv.name}: $${(inv.totalPayout / 100).toLocaleString('es-CO')} (${inv.percentage}%)\n`
+        })
+      } else {
+        text += `  - Fondeo Propio JyJ (100%)\n`
+      }
+      text += `\n`
+    })
+
+    text += `_Generado automáticamente por el Sistema Préstamos JyJ_`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank")
+  }
+
+  const generateBatchBreakdownPDF = (data: any) => {
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+
+    // Header
+    doc.setFillColor(15, 23, 42) // Slate 900
+    doc.rect(0, 0, pageWidth, 28, 'F')
+    doc.setFillColor(147, 51, 234) // Purple 500
+    doc.rect(0, 28, pageWidth, 2, 'F')
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(14)
+    doc.setTextColor(255, 255, 255)
+    doc.text("JYJ PRÉSTAMOS - REPORTE DE PAGOS A INVERSIONISTAS", 14, 12)
+
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(192, 132, 252)
+    doc.text("INFORME DE DISTRIBUCIÓN DE CUOTAS COBRADAS Y TRANSFERENCIAS CONSOLIDADAS", 14, 18)
+    doc.setTextColor(148, 163, 184)
+    doc.text(`Préstamos Procesados: ${data.loansBreakdown.length}`, 14, 23)
+
+    doc.setFontSize(8)
+    doc.setTextColor(255, 255, 255)
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO')}`, pageWidth - 14, 12, { align: "right" })
+
+    // Consolidated Payouts Table
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42)
+    doc.setFont("helvetica", "bold")
+    doc.text("1. CONSOLIDADO DE TRANSFERENCIAS A REALIZAR", 14, 38)
+
+    const consolidatedRows = data.consolidatedPayouts.map((p: any, idx: number) => {
+      let concept = ""
+      if (p.type === "INVESTOR") concept = "Retorno Capital + Rendimiento Inversionista"
+      else if (p.type === "COMPANY") concept = "Utilidad JyJ (Capital Propio + Comisión Plataforma)"
+      else if (p.type === "SECRETARY") concept = "Comisión de Colocación y Cobranza"
+      else if (p.type === "REFERRER") concept = "Comisión de Referido (3%)"
+      return [
+        (idx + 1).toString(),
+        p.name,
+        concept,
+        `$${(p.amount / 100).toLocaleString('es-CO')}`
+      ]
+    })
+
+    autoTable(doc, {
+      startY: 42,
+      head: [['#', 'Destinatario', 'Concepto', 'Total a Transferir']],
+      body: consolidatedRows,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 8.5, textColor: [51, 65, 85] },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 60, fontStyle: 'bold' },
+        2: { cellWidth: 80 },
+        3: { cellWidth: 35, halign: 'right', fontStyle: 'bold', textColor: [147, 51, 234] }
+      }
+    })
+
+    // Loan breakdown table
+    const nextY = (doc as any).lastAutoTable.finalY + 10
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42)
+    doc.setFont("helvetica", "bold")
+    doc.text("2. DESGLOSE DETALLADO POR CRÉDITO Y CUOTA PAGADA", 14, nextY)
+
+    const loanRows = data.loansBreakdown.map((l: any, idx: number) => {
+      let distStr = "100% JyJ (Capital Propio)"
+      if (l.investorsBreakdown.length > 0) {
+        distStr = l.investorsBreakdown.map((inv: any) => `${inv.name} (${inv.percentage}%): $${(inv.totalPayout / 100).toLocaleString('es-CO')}`).join('\n')
+      }
+      return [
+        (idx + 1).toString(),
+        `${l.clientName}\nRef: #${l.loanId.slice(-6).toUpperCase()}`,
+        `Cta #${l.installmentNumber}`,
+        `$${(l.amountPaid / 100).toLocaleString('es-CO')}`,
+        `Capital: $${(l.principalPart / 100).toLocaleString('es-CO')}\nInterés: $${(l.interestPart / 100).toLocaleString('es-CO')}`,
+        `Secr: $${(l.secretaryCommission / 100).toLocaleString('es-CO')}\nJyJ: $${(l.companyCommission / 100).toLocaleString('es-CO')}`,
+        distStr
+      ]
+    })
+
+    autoTable(doc, {
+      startY: nextY + 4,
+      head: [['#', 'Cliente / Préstamo', 'Cuota', 'Recaudado', 'Amortización', 'Deducciones', 'Distribución']],
+      body: loanRows,
+      theme: 'grid',
+      headStyles: { fillColor: [88, 28, 135], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 7.5, textColor: [51, 65, 85] },
+      alternateRowStyles: { fillColor: [250, 245, 255] },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        1: { cellWidth: 38 },
+        2: { cellWidth: 15, halign: 'center' },
+        3: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
+        4: { cellWidth: 35 },
+        5: { cellWidth: 30 },
+        6: { cellWidth: 48 }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(7)
+        doc.setTextColor(148, 163, 184)
+        doc.text(
+          `Préstamos JyJ • Reporte de Liquidación de Cuotas Pagadas • Página ${data.pageNumber}`,
+          14,
+          pageHeight - 8
+        )
+      }
+    })
+
+    doc.save(`Desglose_Pagos_Inversionistas_${new Date().getTime()}.pdf`)
+  }
+
   return (
     <div className="relative space-y-4">
       {/* Floating Action Bar */}
@@ -570,6 +761,16 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
             >
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5 text-purple-400" />}
               Liquidación Interna
+            </button>
+
+            <button 
+              onClick={() => handleAction("PAYOUT_BREAKDOWN")}
+              disabled={loading}
+              className="bg-pink-600/20 hover:bg-pink-600/30 text-pink-200 border border-pink-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 disabled:opacity-50 active:scale-95 shadow-sm hover:border-pink-500/50"
+              title="Desglose de distribución de la última cuota pagada entre inversionistas y JyJ"
+            >
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Briefcase className="h-3.5 w-3.5 text-pink-400" />}
+              Desglose de Pago
             </button>
 
             <button 
@@ -706,6 +907,234 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                   <InternalSettlementTemplate data={item} isPreview={false} />
                 </div>
               ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {mounted && breakdownModalOpen && breakdownData && createPortal(
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeBreakdownModal()
+          }}
+          className="fixed inset-0 z-[999999] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+        >
+          <div className="bg-[#0A0F1D] w-full max-w-4xl h-[90vh] max-h-[90vh] rounded-2xl border border-white/20 shadow-[0_25px_70px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            
+            {/* Header del Modal */}
+            <div className="px-4 sm:px-6 py-4 border-b border-white/15 bg-[#0D1424] flex-shrink-0 flex justify-between items-center">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-pink-400" />
+                  Desglose de Pagos a Inversionistas ({breakdownData.loansBreakdown.length} cuotas procesadas)
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Distribución detallada del recaudo de la última cuota pagada
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => handleWhatsAppBreakdown(breakdownData)}
+                  className="h-9 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 active:scale-95 shadow-sm"
+                  title="Compartir resumen consolidado por WhatsApp"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Compartir</span>
+                </button>
+
+                <button
+                  onClick={() => generateBatchBreakdownPDF(breakdownData)}
+                  className="h-9 px-3 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-lg shadow-pink-600/20 active:scale-95"
+                  title="Descargar reporte PDF del desglose de pago"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Descargar PDF</span>
+                </button>
+
+                <button
+                  onClick={closeBreakdownModal}
+                  className="h-9 w-9 bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white rounded-xl flex items-center justify-center transition-all border border-white/10 active:scale-95 ml-1"
+                  title="Cerrar modal (Esc)"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Selector de Pestañas */}
+            <div className="flex bg-[#0D1424] px-4 sm:px-6 border-b border-white/[0.08] flex-shrink-0">
+              <button
+                onClick={() => setBreakdownActiveTab("consolidated")}
+                className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+                  breakdownActiveTab === "consolidated"
+                    ? "border-pink-500 text-pink-400"
+                    : "border-transparent text-muted-foreground hover:text-white"
+                }`}
+              >
+                <Users className="h-3.5 w-3.5" />
+                Consolidado de Transferencias
+              </button>
+              <button
+                onClick={() => setBreakdownActiveTab("details")}
+                className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+                  breakdownActiveTab === "details"
+                    ? "border-pink-500 text-pink-400"
+                    : "border-transparent text-muted-foreground hover:text-white"
+                }`}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Detalles por Crédito
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950/40">
+              {breakdownActiveTab === "consolidated" ? (
+                <div className="space-y-4">
+                  <div className="bg-slate-900/60 border border-white/[0.08] rounded-xl p-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                      Listado de transferencias a realizar
+                    </h4>
+                    <div className="divide-y divide-white/[0.06] space-y-3">
+                      {breakdownData.consolidatedPayouts.map((p: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-start pt-3 first:pt-0">
+                          <div>
+                            <p className="text-sm font-bold text-white">{p.name}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {p.type === "INVESTOR" ? "Inversionista Externo" :
+                               p.type === "COMPANY" ? "JyJ (Capital propio + Comisiones)" :
+                               p.type === "SECRETARY" ? "Secretaría (Comisión Colocación/Cobranza)" : "Comisión por Referido (3%)"}
+                            </p>
+                            {/* Desglose individual de qué créditos aporta a esta transferencia */}
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {p.details.map((det: any, dIdx: number) => (
+                                <span key={dIdx} className="text-[9px] bg-white/[0.04] border border-white/[0.06] text-slate-300 px-2 py-0.5 rounded font-mono">
+                                  {det.clientName}: ${(det.total / 100).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <span className="text-base font-extrabold text-pink-400 font-mono">
+                              ${(p.amount / 100).toLocaleString('es-CO')}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {breakdownData.loansBreakdown.map((l: any, idx: number) => (
+                    <div key={idx} className="bg-slate-900/60 border border-white/[0.08] rounded-xl p-5 space-y-4 text-left">
+                      {/* Header de deudor */}
+                      <div className="flex justify-between items-center border-b border-white/[0.06] pb-3">
+                        <div>
+                          <h4 className="text-sm font-extrabold text-white">{l.clientName}</h4>
+                          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+                            Ref: #{l.loanId.slice(-8).toUpperCase()} • CC: {l.idDocument}
+                          </p>
+                        </div>
+                        <span className="bg-pink-500/10 text-pink-400 border border-pink-500/20 px-2.5 py-1 rounded-lg text-xs font-semibold font-mono">
+                          Cuota #{l.installmentNumber} Pagada
+                        </span>
+                      </div>
+
+                      {/* Caja de recaudo y amortización */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="bg-white/[0.02] border border-white/[0.05] p-3 rounded-lg">
+                          <span className="text-[10px] text-muted-foreground block uppercase">Recaudado</span>
+                          <span className="text-sm font-bold text-white font-mono">${(l.amountPaid / 100).toLocaleString('es-CO')}</span>
+                        </div>
+                        <div className="bg-white/[0.02] border border-white/[0.05] p-3 rounded-lg">
+                          <span className="text-[10px] text-muted-foreground block uppercase">Capital</span>
+                          <span className="text-sm font-bold text-white font-mono">${(l.principalPart / 100).toLocaleString('es-CO')}</span>
+                        </div>
+                        <div className="bg-white/[0.02] border border-white/[0.05] p-3 rounded-lg">
+                          <span className="text-[10px] text-muted-foreground block uppercase">Interés</span>
+                          <span className="text-sm font-bold text-white font-mono">${(l.interestPart / 100).toLocaleString('es-CO')}</span>
+                        </div>
+                        <div className="bg-white/[0.02] border border-white/[0.05] p-3 rounded-lg">
+                          <span className="text-[10px] text-muted-foreground block uppercase">Mora Cobrada</span>
+                          <span className="text-sm font-bold text-orange-400 font-mono">${(l.lateFee / 100).toLocaleString('es-CO')}</span>
+                        </div>
+                      </div>
+
+                      {/* Deducciones */}
+                      <div className="bg-white/[0.02] border border-white/[0.05] p-4 rounded-lg space-y-2">
+                        <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          Deducciones y Comisiones de la Cuota
+                        </h5>
+                        <div className="grid grid-cols-3 gap-4 text-xs">
+                          <div>
+                            <span className="text-muted-foreground block">Secretaría:</span>
+                            <span className="font-semibold text-slate-200 font-mono">${(l.secretaryCommission / 100).toLocaleString('es-CO')}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block">Comisión JyJ:</span>
+                            <span className="font-semibold text-slate-200 font-mono">${(l.companyCommission / 100).toLocaleString('es-CO')}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block">Comisión Referidor:</span>
+                            <span className="font-semibold text-slate-200 font-mono">${(l.referralCommission / 100).toLocaleString('es-CO')}</span>
+                          </div>
+                        </div>
+                        <div className="border-t border-white/[0.04] pt-2 flex justify-between items-center text-xs">
+                          <span className="font-semibold text-emerald-400">Rendimiento Neto a Repartir:</span>
+                          <span className="font-extrabold text-emerald-400 font-mono">${(l.netYield / 100).toLocaleString('es-CO')}</span>
+                        </div>
+                      </div>
+
+                      {/* Repartición Final */}
+                      <div className="space-y-2.5">
+                        <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          Distribución de Fondos
+                        </h5>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {l.investorsBreakdown.map((inv: any, iIdx: number) => (
+                            <div key={iIdx} className="bg-white/[0.03] border border-white/[0.06] rounded-lg p-3 flex justify-between items-center text-xs">
+                              <div>
+                                <p className="font-bold text-white">{inv.name}</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  Part: {inv.percentage}% • (Cap: ${(inv.capitalPayout / 100).toLocaleString('es-CO')} + Int: ${(inv.interestPayout / 100).toLocaleString('es-CO')})
+                                </p>
+                              </div>
+                              <span className="font-bold text-pink-400 font-mono text-sm">${(inv.totalPayout / 100).toLocaleString('es-CO')}</span>
+                            </div>
+                          ))}
+                          
+                          {/* Mostrar también la parte de capital propio de JyJ si aplica */}
+                          {l.jyjBreakdown.percentage > 0 && (
+                            <div className="bg-white/[0.03] border border-white/[0.06] rounded-lg p-3 flex justify-between items-center text-xs">
+                              <div>
+                                <p className="font-bold text-emerald-400">Capital Propio (JyJ)</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  Part: {l.jyjBreakdown.percentage}% • (Cap: ${(l.jyjBreakdown.capital / 100).toLocaleString('es-CO')} + Int: ${(l.jyjBreakdown.interest / 100).toLocaleString('es-CO')})
+                                </p>
+                              </div>
+                              <span className="font-bold text-emerald-400 font-mono text-sm">${(l.jyjBreakdown.total / 100).toLocaleString('es-CO')}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-white/10 bg-[#0D1424] flex justify-end flex-shrink-0">
+              <button
+                onClick={closeBreakdownModal}
+                className="bg-[#1E293B] hover:bg-[#334155] border border-white/10 text-white px-5 py-2 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>,

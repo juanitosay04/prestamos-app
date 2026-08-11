@@ -1066,4 +1066,190 @@ export async function getInternalSettlementData(loanIds: string[]) {
   }
 }
 
+export async function getBatchInstallmentBreakdown(loanIds: string[]) {
+  try {
+    const loans = await prisma.loan.findMany({
+      where: { id: { in: loanIds } },
+      include: {
+        client: true,
+        installments: { orderBy: { installmentNumber: "asc" } },
+        investors: { include: { investor: true } }
+      }
+    })
+
+    if (!loans || loans.length === 0) {
+      return { error: "No se encontraron los préstamos especificados" }
+    }
+
+    const details: any[] = []
+    const consolidatedMap: Record<string, { name: string, type: string, amount: number, details: any[] }> = {}
+
+    for (const loan of loans) {
+      // Buscar la última cuota pagada
+      const paidInstallments = loan.installments.filter(i => i.status === "PAID")
+      if (paidInstallments.length === 0) {
+        continue // No tiene cuotas pagadas aún
+      }
+
+      const installment = paidInstallments[paidInstallments.length - 1] // La más reciente
+      const totalInterest = installment.interestPart + (installment.lateFee || 0)
+
+      // 1. Comisión secretaria
+      let secComm = 0
+      if (loan.secretaryCommissionType === "FIXED_AMOUNT") {
+        secComm = Math.round(loan.secretaryCommission / (loan.numberOfInstallments || 1))
+      } else if (loan.secretaryCommissionType === "PERCENTAGE_PRINCIPAL") {
+        secComm = Math.round((loan.principalAmount * (loan.secretaryCommission / 100)) / (loan.numberOfInstallments || 1))
+      } else {
+        secComm = Math.round(totalInterest * (loan.secretaryCommission / 100))
+      }
+
+      // 2. Comisión JyJ
+      let jyjComm = 0
+      if (loan.companyCommissionType === "FIXED_AMOUNT") {
+        jyjComm = Math.round(loan.companyCommission / (loan.numberOfInstallments || 1))
+      } else if (loan.companyCommissionType === "PERCENTAGE_PRINCIPAL") {
+        jyjComm = Math.round((loan.principalAmount * (loan.companyCommission / 100)) / (loan.numberOfInstallments || 1))
+      } else {
+        jyjComm = Math.round(totalInterest * (loan.companyCommission / 100))
+      }
+
+      // 3. Referidor (3% del interés)
+      const refComm = loan.referredByInvestorId ? Math.round(totalInterest * 0.03) : 0
+
+      // 4. Rendimiento Neto
+      const netYield = Math.max(0, totalInterest - secComm - jyjComm - refComm)
+
+      // Distribución por inversionista
+      const totalInvPct = loan.investors.reduce((sum, inv) => sum + inv.participationPercentage, 0)
+      const jyjPct = Math.max(0, 100 - totalInvPct)
+
+      const investorsBreakdown: any[] = []
+
+      // Inversionistas externos
+      for (const inv of loan.investors) {
+        const capitalPayout = Math.round(installment.principalPart * (inv.participationPercentage / 100))
+        const interestPayout = Math.round(netYield * (inv.participationPercentage / 100))
+        const totalPayout = capitalPayout + interestPayout
+
+        investorsBreakdown.push({
+          investorId: inv.investorId,
+          name: inv.investor.name,
+          percentage: inv.participationPercentage,
+          capitalPayout,
+          interestPayout,
+          totalPayout
+        })
+
+        // Acumular en consolidados
+        if (!consolidatedMap[inv.investorId]) {
+          consolidatedMap[inv.investorId] = { name: inv.investor.name, type: "INVESTOR", amount: 0, details: [] }
+        }
+        consolidatedMap[inv.investorId].amount += totalPayout
+        consolidatedMap[inv.investorId].details.push({
+          clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+          loanId: loan.id,
+          installmentNumber: installment.installmentNumber,
+          capital: capitalPayout,
+          interest: interestPayout,
+          total: totalPayout
+        })
+      }
+
+      // Capital Propio (JyJ Fondeador)
+      const jyjCapital = Math.round(installment.principalPart * (jyjPct / 100))
+      const jyjInterest = Math.round(netYield * (jyjPct / 100))
+      const jyjTotal = jyjCapital + jyjInterest
+
+      // Acumulación de JyJ en consolidados (Capital propio + Comisión de plataforma)
+      const jyjId = "jyj-plataforma"
+      if (!consolidatedMap[jyjId]) {
+        consolidatedMap[jyjId] = { name: "Préstamos JyJ", type: "COMPANY", amount: 0, details: [] }
+      }
+      consolidatedMap[jyjId].amount += jyjTotal + jyjComm
+      consolidatedMap[jyjId].details.push({
+        clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+        loanId: loan.id,
+        installmentNumber: installment.installmentNumber,
+        capital: jyjCapital,
+        interest: jyjInterest,
+        commission: jyjComm,
+        total: jyjTotal + jyjComm
+      })
+
+      // Acumulación de Secretaría en consolidados
+      if (secComm > 0) {
+        const secId = "secretaria"
+        if (!consolidatedMap[secId]) {
+          consolidatedMap[secId] = { name: "Secretaría (Comisión Colocación/Cobranza)", type: "SECRETARY", amount: 0, details: [] }
+        }
+        consolidatedMap[secId].amount += secComm
+        consolidatedMap[secId].details.push({
+          clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+          loanId: loan.id,
+          installmentNumber: installment.installmentNumber,
+          total: secComm
+        })
+      }
+
+      // Acumulación de Referidor en consolidados (si existe)
+      if (refComm > 0 && loan.referredByInvestorId) {
+        // Encontrar nombre del inversionista referidor
+        const referrer = loan.investors.find(i => i.investorId === loan.referredByInvestorId)?.investor 
+          || await prisma.investor.findUnique({ where: { id: loan.referredByInvestorId } })
+        
+        const refName = referrer ? referrer.name : "Inversionista Referidor"
+        const refKey = `ref-${loan.referredByInvestorId}`
+        if (!consolidatedMap[refKey]) {
+          consolidatedMap[refKey] = { name: `${refName} (Comisión Referido 3%)`, type: "REFERRER", amount: 0, details: [] }
+        }
+        consolidatedMap[refKey].amount += refComm
+        consolidatedMap[refKey].details.push({
+          clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+          loanId: loan.id,
+          installmentNumber: installment.installmentNumber,
+          total: refComm
+        })
+      }
+
+      details.push({
+        loanId: loan.id,
+        clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+        idDocument: loan.client.idDocument,
+        installmentNumber: installment.installmentNumber,
+        expectedAmount: installment.expectedAmount,
+        amountPaid: installment.amountPaid,
+        principalPart: installment.principalPart,
+        interestPart: installment.interestPart,
+        lateFee: installment.lateFee,
+        totalInterest,
+        secretaryCommission: secComm,
+        companyCommission: jyjComm,
+        referralCommission: refComm,
+        netYield,
+        investorsBreakdown,
+        jyjBreakdown: {
+          percentage: jyjPct,
+          capital: jyjCapital,
+          interest: jyjInterest,
+          total: jyjTotal
+        }
+      })
+    }
+
+    const consolidatedList = Object.values(consolidatedMap)
+
+    return {
+      success: true,
+      data: JSON.parse(JSON.stringify({
+        loansBreakdown: details,
+        consolidatedPayouts: consolidatedList
+      }))
+    }
+  } catch (error: any) {
+    console.error("Error in getBatchInstallmentBreakdown:", error)
+    return { error: error.message || "Error al generar desglose masivo" }
+  }
+}
+
 
