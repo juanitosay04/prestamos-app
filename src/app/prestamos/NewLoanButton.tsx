@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Plus, X, Calculator, Trash2, Loader2, Sparkles, ShieldAlert, Building2, User, ChevronDown, ChevronUp } from "lucide-react"
 import { createLoan } from "@/app/actions/loan"
 import { CurrencyInput } from "@/components/ui/CurrencyInput"
@@ -74,21 +74,54 @@ export function NewLoanButton({
     investorEarningsEstimated: number
   } | null>(null)
 
-  const handleCalculate = () => {
-    const principal = parseFloat(principalAmount)
-    const intVal = parseFloat(interestValue)
-    const installments = parseInt(numberOfInstallments)
+  // Cálculo en tiempo real reactivo al cambiar cualquier valor
+  useEffect(() => {
+    const principal = parseFloat(principalAmount) || 0
+    const intVal = parseFloat(interestValue) || 0
+    const installments = parseInt(numberOfInstallments) || 0
 
-    if (isNaN(principal) || isNaN(intVal) || isNaN(installments) || installments < 1) return
-
-    let totalInterest = 0
-    if (interestCalculation === "AMOUNT") {
-      totalInterest = intVal
-    } else {
-      totalInterest = principal * (intVal / 100) * installments
+    if (principal <= 0 || intVal <= 0 || installments < 1) {
+      setPreview(null)
+      return
     }
 
-    const installmentAmount = (principal / installments) + (totalInterest / installments)
+    let installmentAmount = 0
+    let totalInterest = 0
+
+    if (interestCalculation === "AMOUNT") {
+      totalInterest = intVal
+      const pPart = principal / installments
+      const iPart = totalInterest / installments
+      installmentAmount = pPart + iPart
+    } else if (installments === 1) {
+      const iRate = intVal / 100
+      totalInterest = principal * iRate
+      installmentAmount = principal + totalInterest
+    } else {
+      const iRate = intVal / 100
+      if (iRate > 0) {
+        installmentAmount = principal * (iRate / (1 - Math.pow(1 + iRate, -installments)))
+      } else {
+        installmentAmount = principal / installments
+      }
+      
+      let outstandingPrincipal = principal
+      let calculatedTotalInterest = 0
+      for (let i = 1; i <= installments; i++) {
+        let interestPart = 0
+        let principalPart = 0
+        if (i === installments) {
+          principalPart = outstandingPrincipal
+          interestPart = installmentAmount - principalPart
+        } else {
+          interestPart = outstandingPrincipal * iRate
+          principalPart = installmentAmount - interestPart
+        }
+        calculatedTotalInterest += interestPart
+        outstandingPrincipal -= principalPart
+      }
+      totalInterest = calculatedTotalInterest
+    }
 
     // Estimate Company Commission (JyJ)
     let compCommEst = 0
@@ -101,7 +134,6 @@ export function NewLoanButton({
     } else if (effectiveCompType === "PERCENTAGE_PRINCIPAL") {
       compCommEst = principal * (effectiveCompVal / 100)
     } else {
-      // PERCENTAGE_INTEREST
       compCommEst = totalInterest * (effectiveCompVal / 100)
     }
 
@@ -119,10 +151,8 @@ export function NewLoanButton({
       secCommEst = totalInterest * (effectiveSecVal / 100)
     }
 
-    // Rendimiento estimado para inversionistas:
-    // 1. Del interés total se descuentan las comisiones (JyJ y Secretaría)
-    // 2. Lo que queda (pool neto) se distribuye según el % de fondeo del inversionista
-    const investorSharePct = totalPrincipalNum > 0 ? (currentTotalInvestorAmount / totalPrincipalNum) : 0
+    // Investor earnings estimation
+    const investorSharePct = principal > 0 ? (currentTotalInvestorAmount / principal) : 0
     const netInterestPool = Math.max(0, totalInterest - compCommEst - secCommEst)
     const investorNetInterest = netInterestPool * investorSharePct
 
@@ -133,7 +163,21 @@ export function NewLoanButton({
       secretaryCommissionEstimated: secCommEst,
       investorEarningsEstimated: investorNetInterest
     })
-  }
+  }, [
+    principalAmount,
+    interestValue,
+    numberOfInstallments,
+    interestCalculation,
+    companyCommission,
+    companyCommissionType,
+    secretaryCommission,
+    secretaryCommissionType,
+    selectedInvestors,
+    defaultCompanyCommission,
+    defaultSecretaryCommission,
+    currentTotalInvestorAmount,
+    totalPrincipalNum
+  ])
 
   const addInvestor = () => {
     if (investors.length > 0) {
@@ -313,7 +357,7 @@ export function NewLoanButton({
                     <CurrencyInput 
                       required 
                       value={principalAmount} 
-                      onChange={(val) => { setPrincipalAmount(val); setPreview(null); }}
+                      onChange={(val) => setPrincipalAmount(val)}
                       placeholder="0"
                       className="h-10 bg-black/40 border border-white/10 rounded-xl pl-8 pr-3.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500 transition-colors"
                     />
@@ -341,7 +385,7 @@ export function NewLoanButton({
                   <label className="text-[11px] font-semibold text-muted-foreground">Cálculo de Ganancia</label>
                   <select 
                     value={interestCalculation} 
-                    onChange={e => { setInterestCalculation(e.target.value); setPreview(null); }}
+                    onChange={e => setInterestCalculation(e.target.value)}
                     className="h-9 bg-black/40 border border-white/10 rounded-xl px-3 text-xs text-white focus:outline-none focus:border-blue-500 transition-colors"
                   >
                     <option value="AMOUNT" className="bg-[#0D1320]">Monto Fijo Total ($)</option>
@@ -357,7 +401,7 @@ export function NewLoanButton({
                     <CurrencyInput 
                       required 
                       value={interestValue}
-                      onChange={(val) => { setInterestValue(val); setPreview(null); }}
+                      onChange={(val) => setInterestValue(val)}
                       className="h-9 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-500 transition-colors" 
                     />
                   ) : (
@@ -366,7 +410,7 @@ export function NewLoanButton({
                       type="number" 
                       step="0.01"
                       value={interestValue}
-                      onChange={e => { setInterestValue(e.target.value); setPreview(null); }}
+                      onChange={e => setInterestValue(e.target.value)}
                       className="h-9 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 text-xs text-emerald-300 font-mono focus:outline-none focus:border-emerald-500 transition-colors" 
                     />
                   )}
@@ -392,7 +436,7 @@ export function NewLoanButton({
                     type="number" 
                     min="1"
                     value={numberOfInstallments}
-                    onChange={e => { setNumberOfInstallments(e.target.value); setPreview(null); }}
+                    onChange={e => setNumberOfInstallments(e.target.value)}
                     className="h-10 bg-black/40 border border-white/10 rounded-xl px-3.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500 transition-colors" 
                   />
                 </div>
@@ -438,7 +482,7 @@ export function NewLoanButton({
                       </div>
                       <select
                         value={companyCommissionType}
-                        onChange={e => { setCompanyCommissionType(e.target.value); setPreview(null); }}
+                        onChange={e => setCompanyCommissionType(e.target.value)}
                         className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white focus:outline-none focus:border-emerald-500"
                       >
                         <option value="PERCENTAGE_INTEREST" className="bg-[#0D1320]">% Sobre Interés Cobrado</option>
@@ -451,7 +495,7 @@ export function NewLoanButton({
                           step="0.01"
                           min="0"
                           value={companyCommission}
-                          onChange={e => { setCompanyCommission(e.target.value); setPreview(null); }}
+                          onChange={e => setCompanyCommission(e.target.value)}
                           placeholder={defaultCompanyCommission ? `Defecto: ${defaultCompanyCommission.commissionValue}` : "0"}
                           className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white font-mono focus:outline-none focus:border-emerald-500"
                         />
@@ -475,7 +519,7 @@ export function NewLoanButton({
                       </div>
                       <select
                         value={secretaryCommissionType}
-                        onChange={e => { setSecretaryCommissionType(e.target.value); setPreview(null); }}
+                        onChange={e => setSecretaryCommissionType(e.target.value)}
                         className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white focus:outline-none focus:border-blue-500"
                       >
                         <option value="PERCENTAGE_INTEREST" className="bg-[#0D1320]">% Sobre Interés Cobrado</option>
@@ -488,7 +532,7 @@ export function NewLoanButton({
                           step="0.01"
                           min="0"
                           value={secretaryCommission}
-                          onChange={e => { setSecretaryCommission(e.target.value); setPreview(null); }}
+                          onChange={e => setSecretaryCommission(e.target.value)}
                           placeholder={defaultSecretaryCommission ? `Defecto: ${defaultSecretaryCommission.commissionValue}` : "0"}
                           className="w-full h-8 bg-black/40 border border-white/10 rounded-lg px-2.5 text-[11px] text-white font-mono focus:outline-none focus:border-blue-500"
                         />
@@ -503,15 +547,7 @@ export function NewLoanButton({
 
               {/* Simulador */}
               <div className="flex flex-col gap-2 pt-1">
-                <button 
-                  type="button" 
-                  onClick={handleCalculate}
-                  className="h-10 w-full flex items-center justify-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-white px-4 rounded-xl text-xs font-semibold transition-all active:scale-98"
-                >
-                  <Calculator className="h-3.5 w-3.5 text-blue-400" />
-                  Simular Plan y Liquidación
-                </button>
-                {preview && (
+                {preview ? (
                   <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-3 animate-in fade-in duration-200">
                     <div className="flex justify-between items-center pb-2 border-b border-white/[0.06]">
                       <div>
@@ -544,6 +580,10 @@ export function NewLoanButton({
                         </div>
                       )}
                     </div>
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-white/10 rounded-2xl p-4 text-center text-xs text-muted-foreground bg-white/[0.01]">
+                    Completa el capital, interés y cuotas para ver la liquidación en tiempo real.
                   </div>
                 )}
               </div>
