@@ -3,6 +3,9 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 
+import { getCurrentUserSummary } from "@/lib/session"
+import { notifyExpenseCreated, notifyExpenseDeleted } from "@/lib/telegram"
+
 export async function createExpense(formData: FormData) {
   try {
     const description = formData.get("description")?.toString()
@@ -26,6 +29,15 @@ export async function createExpense(formData: FormData) {
       }
     })
 
+    const operator = await getCurrentUserSummary()
+    notifyExpenseCreated({
+      expenseId: expense.id,
+      description,
+      amount,
+      category,
+      performedBy: operator.label
+    }).catch(err => console.error("Telegram notifyExpenseCreated error:", err))
+
     revalidatePath("/", "layout")
     return { success: true, expense }
   } catch (error: any) {
@@ -36,10 +48,22 @@ export async function createExpense(formData: FormData) {
 
 export async function deleteExpense(id: string) {
   try {
+    const expense = await prisma.expense.findUnique({ where: { id } })
     await prisma.expense.update({
       where: { id },
       data: { deletedAt: new Date() }
     })
+
+    if (expense) {
+      const operator = await getCurrentUserSummary()
+      notifyExpenseDeleted({
+        expenseId: expense.id,
+        description: expense.description,
+        amount: expense.amount,
+        performedBy: operator.label
+      }).catch(err => console.error("Telegram notifyExpenseDeleted error:", err))
+    }
+
     revalidatePath("/", "layout")
     return { success: true }
   } catch (error: any) {

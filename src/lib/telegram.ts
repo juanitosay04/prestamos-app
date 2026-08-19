@@ -259,3 +259,129 @@ export async function notifyDailySummary(data: {
 
   return sendTelegramMessage(message)
 }
+
+/**
+ * 👤 Notificación de Nuevo Cliente Creado
+ */
+export async function notifyClientCreated(data: {
+  clientId: string
+  clientName: string
+  idDocument: string
+  phone: string
+  performedBy?: string
+}) {
+  const message = `👤 <b>NUEVO CLIENTE REGISTRADO</b>\n\n` +
+    `👤 <b>Nombre:</b> ${data.clientName}\n` +
+    `📄 <b>Documento CC:</b> <code>${data.idDocument}</code>\n` +
+    `📱 <b>Teléfono:</b> ${data.phone}\n` +
+    (data.performedBy ? `✍️ <b>Registrado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>ID Cliente:</b> <code>${data.clientId}</code>\n\n` +
+    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * 🗑️ Notificación de Cliente Eliminado
+ */
+export async function notifyClientDeleted(data: {
+  clientId: string
+  clientName: string
+  idDocument: string
+  performedBy?: string
+}) {
+  const message = `🗑️ <b>CLIENTE ELIMINADO del sistema</b>\n\n` +
+    `👤 <b>Nombre:</b> ${data.clientName}\n` +
+    `📄 <b>Documento CC:</b> <code>${data.idDocument}</code>\n` +
+    (data.performedBy ? `❌ <b>Eliminado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>ID Cliente:</b> <code>${data.clientId}</code>\n\n` +
+    `⏱️ <i>Eliminado el ${new Date().toLocaleString("es-CO")}</i>`
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * 👥 Notificación de Nuevo Inversionista Creado
+ */
+export async function notifyInvestorCreated(data: {
+  investorId: string
+  investorName: string
+  phone?: string
+  email?: string
+  performedBy?: string
+}) {
+  const message = `👥 <b>NUEVO INVERSIONISTA REGISTRADO</b>\n\n` +
+    `👤 <b>Inversionista:</b> ${data.investorName}\n` +
+    (data.phone ? `📱 <b>Teléfono:</b> ${data.phone}\n` : "") +
+    (data.email ? `📧 <b>Email:</b> ${data.email}\n` : "") +
+    (data.performedBy ? `✍️ <b>Registrado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>ID Inversionista:</b> <code>${data.investorId}</code>\n\n` +
+    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * 🗑️ Notificación de Inversionista Eliminado
+ */
+export async function notifyInvestorDeleted(data: {
+  investorId: string
+  investorName: string
+  performedBy?: string
+}) {
+  const message = `🗑️ <b>INVERSIONISTA ELIMINADO del sistema</b>\n\n` +
+    `👤 <b>Inversionista:</b> ${data.investorName}\n` +
+    (data.performedBy ? `❌ <b>Eliminado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>ID Inversionista:</b> <code>${data.investorId}</code>\n\n` +
+    `⏱️ <i>Eliminado el ${new Date().toLocaleString("es-CO")}</i>`
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * 💸 Notificación de Gasto Registrado
+ */
+export async function notifyExpenseCreated(data: {
+  expenseId: string
+  description: string
+  amount: number
+  category: string
+  performedBy?: string
+}) {
+  const categoryMap: Record<string, string> = {
+    OFFICE: "Oficina / Papelería",
+    SALARY: "Nómina / Salario",
+    UTILITIES: "Servicios Públicos",
+    OTHER: "Otros Gastos"
+  }
+  const category = categoryMap[data.category] || data.category
+
+  const message = `💸 <b>NUEVO GASTO / EGRESO REGISTRADO</b>\n\n` +
+    `📝 <b>Concepto:</b> ${data.description}\n` +
+    `💰 <b>Monto Gasto:</b> ${formatMoney(data.amount)}\n` +
+    `📁 <b>Categoría:</b> ${category}\n` +
+    (data.performedBy ? `✍️ <b>Registrado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>ID Gasto:</b> <code>${data.expenseId}</code>\n\n` +
+    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * 🗑️ Notificación de Gasto Eliminado
+ */
+export async function notifyExpenseDeleted(data: {
+  expenseId: string
+  description: string
+  amount: number
+  performedBy?: string
+}) {
+  const message = `🗑️ <b>GASTO / EGRESO ELIMINADO</b>\n\n` +
+    `📝 <b>Concepto:</b> ${data.description}\n` +
+    `💰 <b>Monto Gasto:</b> ${formatMoney(data.amount)}\n` +
+    (data.performedBy ? `❌ <b>Eliminado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>ID Gasto:</b> <code>${data.expenseId}</code>\n\n` +
+    `⏱️ <i>Eliminado el ${new Date().toLocaleString("es-CO")}</i>`
+
+  return sendTelegramMessage(message)
+}

@@ -2,7 +2,8 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
-import { getSession } from "@/lib/session"
+import { getSession, getCurrentUserSummary } from "@/lib/session"
+import { notifyInvestorCreated, notifyInvestorDeleted } from "@/lib/telegram"
 
 export async function getInvestors() {
   try {
@@ -61,6 +62,7 @@ export async function createInvestor(formData: FormData) {
     
     // Notificación / Auditoría
     const session = await getSession()
+    const operator = await getCurrentUserSummary()
     if (session) {
       await prisma.auditLog.create({
         data: {
@@ -73,6 +75,14 @@ export async function createInvestor(formData: FormData) {
       })
     }
     
+    notifyInvestorCreated({
+      investorId: investor.id,
+      investorName: name,
+      phone: phone || undefined,
+      email: email || undefined,
+      performedBy: operator.label
+    }).catch(err => console.error("Telegram notifyInvestorCreated error:", err))
+
     revalidatePath("/inversionistas")
     return { success: true, investor }
   } catch (error: any) {
@@ -140,6 +150,13 @@ export async function deleteInvestor(id: string) {
       data: { deletedAt: new Date() }
     })
     
+    const operator = await getCurrentUserSummary()
+    notifyInvestorDeleted({
+      investorId: investor.id,
+      investorName: investor.name,
+      performedBy: operator.label
+    }).catch(err => console.error("Telegram notifyInvestorDeleted error:", err))
+
     revalidatePath("/inversionistas")
     return { success: true }
   } catch (error: any) {

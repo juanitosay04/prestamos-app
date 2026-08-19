@@ -2,7 +2,8 @@
 
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
-import { getSession } from "@/lib/session"
+import { getSession, getCurrentUserSummary } from "@/lib/session"
+import { notifyClientCreated, notifyClientDeleted } from "@/lib/telegram"
 
 export async function getClients() {
   try {
@@ -49,6 +50,7 @@ export async function createClient(formData: FormData) {
     
     // Notificación / Auditoría
     const session = await getSession()
+    const operator = await getCurrentUserSummary()
     if (session) {
       await prisma.auditLog.create({
         data: {
@@ -60,6 +62,14 @@ export async function createClient(formData: FormData) {
         }
       })
     }
+    
+    notifyClientCreated({
+      clientId: client.id,
+      clientName: `${firstName} ${lastName}`,
+      idDocument,
+      phone,
+      performedBy: operator.label
+    }).catch(err => console.error("Telegram notifyClientCreated error:", err))
     
     revalidatePath("/clientes")
     return { success: true, client }
@@ -74,11 +84,23 @@ export async function createClient(formData: FormData) {
 
 export async function deleteClient(id: string) {
   try {
+    const client = await prisma.client.findUnique({ where: { id } })
     // Soft delete
     await prisma.client.update({
       where: { id },
       data: { deletedAt: new Date() }
     })
+
+    if (client) {
+      const operator = await getCurrentUserSummary()
+      notifyClientDeleted({
+        clientId: client.id,
+        clientName: `${client.firstName} ${client.lastName}`,
+        idDocument: client.idDocument,
+        performedBy: operator.label
+      }).catch(err => console.error("Telegram notifyClientDeleted error:", err))
+    }
+
     revalidatePath("/clientes")
     return { success: true }
   } catch (error) {
