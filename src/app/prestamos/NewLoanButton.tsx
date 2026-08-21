@@ -50,7 +50,79 @@ export function NewLoanButton({
   )
 
   const [numberOfInstallments, setNumberOfInstallments] = useState("1")
-  const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0])
+  
+  // Fechas interactivas
+  const [disbursementDate, setDisbursementDate] = useState(new Date().toISOString().split("T")[0])
+  const [firstPaymentDate, setFirstPaymentDate] = useState("")
+  const [biweeklyDay1, setBiweeklyDay1] = useState("15")
+  const [biweeklyDay2, setBiweeklyDay2] = useState("30")
+
+  // Funciones de fecha auxiliares
+  const addMonths = (date: Date, months: number): Date => {
+    const d = new Date(date)
+    d.setMonth(d.getMonth() + months)
+    return d
+  }
+  const addWeeks = (date: Date, weeks: number): Date => {
+    const d = new Date(date)
+    d.setDate(d.getDate() + (weeks * 7))
+    return d
+  }
+  const addDays = (date: Date, days: number): Date => {
+    const d = new Date(date)
+    d.setDate(d.getDate() + days)
+    return d
+  }
+
+  function getNextBiweeklyDate(fromDate: Date, day1: number, day2: number): Date {
+    const temp = new Date(fromDate)
+    for (let k = 1; k <= 45; k++) {
+      temp.setDate(temp.getDate() + 1)
+      const currentDay = temp.getDate()
+      
+      const lastDayOfMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate()
+      
+      if (currentDay === day1) {
+        return new Date(temp)
+      }
+      
+      if (day2 >= 30) {
+        if (currentDay === lastDayOfMonth && lastDayOfMonth < day2) {
+          return new Date(temp)
+        } else if (currentDay === day2) {
+          return new Date(temp)
+        }
+      } else {
+        if (currentDay === day2) {
+          return new Date(temp)
+        }
+      }
+    }
+    return temp
+  }
+
+  // Autocompletar sugerencia de primera cuota según frecuencia
+  useEffect(() => {
+    if (!disbursementDate) return
+    const parts = disbursementDate.split("-")
+    const disDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 12, 0, 0)
+    
+    if (interestType === "MONTHLY") {
+      const nextMonth = addMonths(disDate, 1)
+      setFirstPaymentDate(nextMonth.toISOString().split("T")[0])
+    } else if (interestType === "WEEKLY") {
+      const nextWeek = addWeeks(disDate, 1)
+      setFirstPaymentDate(nextWeek.toISOString().split("T")[0])
+    } else if (interestType === "DAILY") {
+      const nextDay = addDays(disDate, 1)
+      setFirstPaymentDate(nextDay.toISOString().split("T")[0])
+    } else if (interestType === "BIWEEKLY") {
+      const d1 = parseInt(biweeklyDay1) || 15
+      const d2 = parseInt(biweeklyDay2) || 30
+      const nextBiweekly = getNextBiweeklyDate(disDate, d1, d2)
+      setFirstPaymentDate(nextBiweekly.toISOString().split("T")[0])
+    }
+  }, [disbursementDate, interestType, biweeklyDay1, biweeklyDay2])
 
   // Referral State
   const [hasReferral, setHasReferral] = useState(false)
@@ -260,10 +332,14 @@ export function NewLoanButton({
       companyCommissionType,
       upfrontFee: Math.round((parseFloat(upfrontFee) || 0) * 100),
       interestType,
-      startDate,
+      startDate: disbursementDate,
       numberOfInstallments: parseInt(numberOfInstallments),
       investors: formattedInvestors,
-      referredByInvestorId: hasReferral ? referredByInvestorId : undefined
+      referredByInvestorId: hasReferral ? referredByInvestorId : undefined,
+      disbursementDate,
+      firstPaymentDate,
+      biweeklyDay1,
+      biweeklyDay2
     }
 
     const result = await createLoan(data)
@@ -440,17 +516,62 @@ export function NewLoanButton({
                     className="h-10 bg-black/40 border border-white/10 rounded-xl px-3.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500 transition-colors" 
                   />
                 </div>
+                
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Fecha Primera Cuota *</label>
+                  <label className="text-xs font-semibold text-muted-foreground">Fecha de Desembolso *</label>
                   <input 
                     required 
                     type="date" 
-                    value={startDate}
-                    onChange={e => setStartDate(e.target.value)}
+                    value={disbursementDate}
+                    onChange={e => setDisbursementDate(e.target.value)}
                     className="h-10 bg-black/40 border border-white/10 rounded-xl px-3.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500 transition-colors" 
                   />
                 </div>
               </div>
+
+              {/* Campos dinámicos de fechas según la frecuencia seleccionada */}
+              {interestType === "BIWEEKLY" ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 animate-in fade-in duration-200">
+                  <div className="flex flex-col gap-1.5 text-left">
+                    <label className="text-xs font-bold text-blue-400">Día de Pago Quincena 1 *</label>
+                    <select
+                      value={biweeklyDay1}
+                      onChange={e => setBiweeklyDay1(e.target.value)}
+                      className="h-10 bg-black/40 border border-white/10 rounded-xl px-3.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                        <option key={day} value={day} className="bg-[#0D1320]">Día {day}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5 text-left">
+                    <label className="text-xs font-bold text-blue-400">Día de Pago Quincena 2 *</label>
+                    <select
+                      value={biweeklyDay2}
+                      onChange={e => setBiweeklyDay2(e.target.value)}
+                      className="h-10 bg-black/40 border border-white/10 rounded-xl px-3.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                        <option key={day} value={day} className="bg-[#0D1320]">Día {day}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5 p-4 rounded-2xl border border-blue-500/15 bg-blue-500/5 animate-in fade-in duration-200 text-left">
+                  <label className="text-xs font-bold text-blue-400">Fecha de Primera Cuota *</label>
+                  <input 
+                    required 
+                    type="date" 
+                    value={firstPaymentDate}
+                    onChange={e => setFirstPaymentDate(e.target.value)}
+                    className="h-10 bg-black/40 border border-white/10 rounded-xl px-3.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500 transition-colors" 
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    Sugerido automáticamente: 1 {interestType === "MONTHLY" ? "mes" : interestType === "WEEKLY" ? "semana" : "día"} después del desembolso. Puedes ajustarlo libremente.
+                  </span>
+                </div>
+              )}
 
               {/* Desplegable de Comisiones Personalizadas */}
               <div className="border border-white/[0.06] rounded-2xl overflow-hidden bg-white/[0.01]">
@@ -579,6 +700,66 @@ export function NewLoanButton({
                           <span className="text-white font-bold">${preview.investorEarningsEstimated.toLocaleString("es-CO", { maximumFractionDigits: 0 })}</span>
                         </div>
                       )}
+                    </div>
+
+                    {/* Calendario Estimado de Vencimientos */}
+                    <div className="border-t border-white/[0.06] pt-3 text-left">
+                      <span className="text-[10px] text-muted-foreground block uppercase font-bold tracking-wider mb-2">
+                        Calendario Estimado de Cuotas
+                      </span>
+                      <div className="grid grid-cols-2 gap-2 text-[10px] max-h-24 overflow-y-auto pr-1">
+                        {(() => {
+                          const datesList: Date[] = []
+                          const installments = parseInt(numberOfInstallments) || 0
+                          if (installments >= 1 && disbursementDate) {
+                            const parts = disbursementDate.split("-")
+                            const disDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 12, 0, 0)
+
+                            if (interestType === "MONTHLY" && firstPaymentDate) {
+                              const fParts = firstPaymentDate.split("-")
+                              const firstPay = new Date(parseInt(fParts[0]), parseInt(fParts[1]) - 1, parseInt(fParts[2]), 12, 0, 0)
+                              for (let i = 0; i < installments; i++) {
+                                datesList.push(addMonths(firstPay, i))
+                              }
+                            } else if (interestType === "BIWEEKLY" && biweeklyDay1 && biweeklyDay2) {
+                              const day1 = parseInt(biweeklyDay1)
+                              const day2 = parseInt(biweeklyDay2)
+                              let lastDate = disDate
+                              for (let i = 0; i < installments; i++) {
+                                const nextDate = getNextBiweeklyDate(lastDate, day1, day2)
+                                datesList.push(nextDate)
+                                lastDate = nextDate
+                              }
+                            } else {
+                              const fParts = firstPaymentDate ? firstPaymentDate.split("-") : null
+                              let currentDate = fParts ? new Date(parseInt(fParts[0]), parseInt(fParts[1]) - 1, parseInt(fParts[2]), 12, 0, 0) : disDate
+                              const hasFirstPay = !!firstPaymentDate
+                              for (let i = 0; i < installments; i++) {
+                                if (i === 0 && hasFirstPay) {
+                                  datesList.push(new Date(currentDate))
+                                } else {
+                                  if (interestType === "WEEKLY") {
+                                    currentDate = addWeeks(currentDate, 1)
+                                  } else if (interestType === "BIWEEKLY") {
+                                    currentDate = addWeeks(currentDate, 2)
+                                  } else if (interestType === "DAILY") {
+                                    currentDate = addDays(currentDate, 1)
+                                  }
+                                  datesList.push(new Date(currentDate))
+                                }
+                              }
+                            }
+                          }
+                          return datesList.map((d, idx) => (
+                            <div key={idx} className="flex justify-between items-center bg-white/[0.03] p-1.5 rounded border border-white/[0.04] font-mono">
+                              <span className="text-muted-foreground">Cuota #{idx + 1}:</span>
+                              <span className="text-white font-semibold">
+                                {d.toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}
+                              </span>
+                            </div>
+                          ))
+                        })()}
+                      </div>
                     </div>
                   </div>
                 ) : (

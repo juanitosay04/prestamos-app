@@ -142,6 +142,34 @@ export async function reviveLoan(loanId: string) {
   }
 }
 
+function getNextBiweeklyDate(fromDate: Date, day1: number, day2: number): Date {
+  const temp = new Date(fromDate)
+  for (let k = 1; k <= 45; k++) {
+    temp.setDate(temp.getDate() + 1)
+    const currentDay = temp.getDate()
+    
+    // Obtener último día del mes actual
+    const lastDayOfMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate()
+    
+    if (currentDay === day1) {
+      return new Date(temp)
+    }
+    
+    if (day2 >= 30) {
+      if (currentDay === lastDayOfMonth && lastDayOfMonth < day2) {
+        return new Date(temp)
+      } else if (currentDay === day2) {
+        return new Date(temp)
+      }
+    } else {
+      if (currentDay === day2) {
+        return new Date(temp)
+      }
+    }
+  }
+  return temp
+}
+
 export async function createLoan(data: any) {
   try {
     const {
@@ -155,11 +183,17 @@ export async function createLoan(data: any) {
       companyCommission,
       companyCommissionType,
       upfrontFee, // Add upfrontFee
-      startDate,
+      startDate, // legacy
       numberOfInstallments,
       investors, // Array of { investorId, participationPercentage, investedAmount }
       referredByInvestorId,
-      refinancedFromId
+      refinancedFromId,
+
+      // Nuevos campos de fechas interactivas
+      disbursementDate,
+      firstPaymentDate,
+      biweeklyDay1,
+      biweeklyDay2
     } = data
 
     // Verificar sesión y cargar comisión de secretaría y empresa por defecto si aplica
@@ -198,9 +232,48 @@ export async function createLoan(data: any) {
       return { error: "Este cliente se encuentra en la lista negra por impago y no puede recibir nuevos préstamos." }
     }
 
-    // 1. Calculate Installments (Amortización Francesa)
+    // 1. Pre-calcular las fechas de vencimiento de las cuotas
+    const finalDisbursement = disbursementDate ? new Date(disbursementDate) : new Date(startDate)
+    const finalFirstPayment = firstPaymentDate ? new Date(firstPaymentDate) : null
+    
+    let dates: Date[] = []
+
+    if (interestType === "MONTHLY") {
+      const firstPay = finalFirstPayment || addMonths(finalDisbursement, 1)
+      for (let i = 0; i < numberOfInstallments; i++) {
+        dates.push(addMonths(firstPay, i))
+      }
+    } else if (interestType === "BIWEEKLY" && biweeklyDay1 && biweeklyDay2) {
+      const day1 = parseInt(biweeklyDay1)
+      const day2 = parseInt(biweeklyDay2)
+      let lastDate = new Date(finalDisbursement)
+      for (let i = 0; i < numberOfInstallments; i++) {
+        const nextDate = getNextBiweeklyDate(lastDate, day1, day2)
+        dates.push(nextDate)
+        lastDate = nextDate
+      }
+    } else {
+      let currentDate = finalFirstPayment || finalDisbursement
+      const hasFirstPay = !!finalFirstPayment
+      
+      for (let i = 0; i < numberOfInstallments; i++) {
+        if (i === 0 && hasFirstPay) {
+          dates.push(currentDate)
+        } else {
+          if (interestType === "WEEKLY") {
+            currentDate = addWeeks(currentDate, 1)
+          } else if (interestType === "BIWEEKLY") {
+            currentDate = addWeeks(currentDate, 2)
+          } else if (interestType === "DAILY") {
+            currentDate = addDays(currentDate, 1)
+          }
+          dates.push(currentDate)
+        }
+      }
+    }
+
+    // 2. Calculate Installments (Amortización Francesa)
     const installmentsData: any[] = []
-    let currentDate = new Date(startDate)
     
     let isFrench = false
     let fixedInstallmentAmount = 0
@@ -230,15 +303,7 @@ export async function createLoan(data: any) {
     let outstandingPrincipal = principalAmount
 
     for (let i = 1; i <= numberOfInstallments; i++) {
-      if (interestType === "MONTHLY") {
-        currentDate = addMonths(currentDate, 1)
-      } else if (interestType === "WEEKLY") {
-        currentDate = addWeeks(currentDate, 1)
-      } else if (interestType === "BIWEEKLY") {
-        currentDate = addWeeks(currentDate, 2)
-      } else if (interestType === "DAILY") {
-        currentDate = addDays(currentDate, 1)
-      }
+      const dueDate = dates[i - 1]
       
       let interestPart = 0
       let principalPart = 0
@@ -260,7 +325,7 @@ export async function createLoan(data: any) {
       
       installmentsData.push({
         installmentNumber: i,
-        dueDate: currentDate,
+        dueDate,
         expectedAmount: fixedInstallmentAmount,
         principalPart: principalPart,
         interestPart: interestPart,
@@ -286,7 +351,7 @@ export async function createLoan(data: any) {
           companyCommission: finalCompanyComm,
           companyCommissionType: finalCompanyCommType as any,
           upfrontFee: upfrontFee || 0,
-          startDate: new Date(startDate),
+          startDate: finalDisbursement,
           endDate,
           numberOfInstallments,
           installmentAmount: fixedInstallmentAmount,
