@@ -1147,7 +1147,7 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
     }
 
     const details: any[] = []
-    const consolidatedMap: Record<string, { name: string, type: string, amount: number, details: any[] }> = {}
+    const consolidatedMap: Record<string, { name: string, type: string, amount: number, capitalTotal: number, interestTotal: number, details: any[] }> = {}
 
     for (const loan of loans) {
       // Buscar la última cuota pagada
@@ -1208,9 +1208,11 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
 
         // Acumular en consolidados
         if (!consolidatedMap[inv.investorId]) {
-          consolidatedMap[inv.investorId] = { name: inv.investor.name, type: "INVESTOR", amount: 0, details: [] }
+          consolidatedMap[inv.investorId] = { name: inv.investor.name, type: "INVESTOR", amount: 0, capitalTotal: 0, interestTotal: 0, details: [] }
         }
         consolidatedMap[inv.investorId].amount += totalPayout
+        consolidatedMap[inv.investorId].capitalTotal += capitalPayout
+        consolidatedMap[inv.investorId].interestTotal += interestPayout
         consolidatedMap[inv.investorId].details.push({
           clientName: `${loan.client.firstName} ${loan.client.lastName}`,
           loanId: loan.id,
@@ -1229,9 +1231,11 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
       // Acumulación de JyJ en consolidados (Capital propio + Comisión de plataforma)
       const jyjId = "jyj-plataforma"
       if (!consolidatedMap[jyjId]) {
-        consolidatedMap[jyjId] = { name: "Préstamos JyJ", type: "COMPANY", amount: 0, details: [] }
+        consolidatedMap[jyjId] = { name: "Préstamos JyJ", type: "COMPANY", amount: 0, capitalTotal: 0, interestTotal: 0, details: [] }
       }
       consolidatedMap[jyjId].amount += jyjTotal + jyjComm
+      consolidatedMap[jyjId].capitalTotal += jyjCapital
+      consolidatedMap[jyjId].interestTotal += jyjInterest + jyjComm
       consolidatedMap[jyjId].details.push({
         clientName: `${loan.client.firstName} ${loan.client.lastName}`,
         loanId: loan.id,
@@ -1246,9 +1250,10 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
       if (secComm > 0) {
         const secId = "secretaria"
         if (!consolidatedMap[secId]) {
-          consolidatedMap[secId] = { name: "Secretaría (Comisión Colocación/Cobranza)", type: "SECRETARY", amount: 0, details: [] }
+          consolidatedMap[secId] = { name: "Secretaría (Comisión Colocación/Cobranza)", type: "SECRETARY", amount: 0, capitalTotal: 0, interestTotal: 0, details: [] }
         }
         consolidatedMap[secId].amount += secComm
+        consolidatedMap[secId].interestTotal += secComm
         consolidatedMap[secId].details.push({
           clientName: `${loan.client.firstName} ${loan.client.lastName}`,
           loanId: loan.id,

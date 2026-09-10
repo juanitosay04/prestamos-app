@@ -47,6 +47,7 @@ export async function createInvestor(formData: FormData) {
     const name = formData.get("name") as string
     const phone = formData.get("phone") as string
     const email = formData.get("email") as string
+    const transferKey = formData.get("transferKey") as string
 
     if (!name) {
       return { error: "El nombre es obligatorio" }
@@ -57,6 +58,7 @@ export async function createInvestor(formData: FormData) {
         name,
         phone: phone || null,
         email: email || null,
+        transferKey: transferKey || null,
       }
     })
     
@@ -96,6 +98,7 @@ export async function updateInvestor(id: string, formData: FormData) {
     const name = formData.get("name") as string
     const phone = formData.get("phone") as string
     const email = formData.get("email") as string
+    const transferKey = formData.get("transferKey") as string
 
     if (!name) {
       return { error: "El nombre es obligatorio" }
@@ -107,6 +110,7 @@ export async function updateInvestor(id: string, formData: FormData) {
         name,
         phone: phone || null,
         email: email || null,
+        transferKey: transferKey || null,
       }
     })
     
@@ -118,6 +122,7 @@ export async function updateInvestor(id: string, formData: FormData) {
     return { error: "Error al actualizar el inversionista" }
   }
 }
+
 
 export async function deleteInvestor(id: string) {
   try {

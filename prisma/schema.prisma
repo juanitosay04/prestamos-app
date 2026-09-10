@@ -95,7 +95,8 @@ model Investor {
   name             String
   phone            String?
   email            String?
-  
+  transferKey      String?   // Llave de transferencia (Nequi, Daviplata, cuenta bancaria, etc.)
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?

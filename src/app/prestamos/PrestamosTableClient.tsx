@@ -646,30 +646,34 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
     const consolidatedRows = data.consolidatedPayouts.map((p: any, idx: number) => {
       let concept = ""
-      if (p.type === "INVESTOR") concept = "Retorno Capital + Rendimiento Inversionista"
-      else if (p.type === "COMPANY") concept = "Utilidad JyJ (Capital Propio + Comisión Plataforma)"
-      else if (p.type === "SECRETARY") concept = "Comisión de Colocación y Cobranza"
-      else if (p.type === "REFERRER") concept = "Comisión de Referido (3%)"
+      if (p.type === "INVESTOR") concept = "Retorno Capital + Rendimiento"
+      else if (p.type === "COMPANY") concept = "Utilidad JyJ (Capital + Comisión)"
+      else if (p.type === "SECRETARY") concept = "Comisión Colocación/Cobranza"
+      else if (p.type === "REFERRER") concept = "Comisión Referido (3%)"
       return [
         (idx + 1).toString(),
         p.name,
         concept,
+        p.capitalTotal > 0 ? `$${(p.capitalTotal / 100).toLocaleString('es-CO')}` : "-",
+        p.interestTotal > 0 ? `$${(p.interestTotal / 100).toLocaleString('es-CO')}` : "-",
         `$${(p.amount / 100).toLocaleString('es-CO')}`
       ]
     })
 
     autoTable(doc, {
       startY: 42,
-      head: [['#', 'Destinatario', 'Concepto', 'Total a Transferir']],
+      head: [['#', 'Destinatario', 'Concepto', 'Capital', 'Rentabilidad', 'Total a Transferir']],
       body: consolidatedRows,
       theme: 'grid',
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
       bodyStyles: { fontSize: 8.5, textColor: [51, 65, 85] },
       columnStyles: {
-        0: { cellWidth: 10, halign: 'center' },
-        1: { cellWidth: 60, fontStyle: 'bold' },
-        2: { cellWidth: 80 },
-        3: { cellWidth: 35, halign: 'right', fontStyle: 'bold', textColor: [147, 51, 234] }
+        0: { cellWidth: 8, halign: 'center' },
+        1: { cellWidth: 50, fontStyle: 'bold' },
+        2: { cellWidth: 55 },
+        3: { cellWidth: 25, halign: 'right', textColor: [37, 99, 235] },
+        4: { cellWidth: 25, halign: 'right', textColor: [5, 150, 105] },
+        5: { cellWidth: 25, halign: 'right', fontStyle: 'bold', textColor: [147, 51, 234] }
       }
     })
 
@@ -683,7 +687,12 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     const loanRows = data.loansBreakdown.map((l: any, idx: number) => {
       let distStr = "100% JyJ (Capital Propio)"
       if (l.investorsBreakdown.length > 0) {
-        distStr = l.investorsBreakdown.map((inv: any) => `${inv.name} (${inv.percentage}%): $${(inv.totalPayout / 100).toLocaleString('es-CO')}`).join('\n')
+        distStr = l.investorsBreakdown.map((inv: any) => 
+          `${inv.name} (${inv.percentage}%)\n  Cap: $${(inv.capitalPayout / 100).toLocaleString('es-CO')} | Rent: $${(inv.interestPayout / 100).toLocaleString('es-CO')} | Total: $${(inv.totalPayout / 100).toLocaleString('es-CO')}`
+        ).join('\n')
+        if (l.jyjBreakdown && l.jyjBreakdown.percentage > 0) {
+          distStr += `\nJyJ ${l.jyjBreakdown.percentage}%: Cap: $${(l.jyjBreakdown.capital / 100).toLocaleString('es-CO')} | Rent: $${(l.jyjBreakdown.interest / 100).toLocaleString('es-CO')}`
+        }
       }
       return [
         (idx + 1).toString(),
@@ -691,10 +700,11 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
         `Cta #${l.installmentNumber}`,
         `$${(l.amountPaid / 100).toLocaleString('es-CO')}`,
         `Capital: $${(l.principalPart / 100).toLocaleString('es-CO')}\nInterés: $${(l.interestPart / 100).toLocaleString('es-CO')}`,
-        `Secr: $${(l.secretaryCommission / 100).toLocaleString('es-CO')}\nJyJ: $${(l.companyCommission / 100).toLocaleString('es-CO')}`,
+        `Secr: $${(l.secretaryCommission / 100).toLocaleString('es-CO')}\nJyJ Com: $${(l.companyCommission / 100).toLocaleString('es-CO')}\nNeto: $${(l.netYield / 100).toLocaleString('es-CO')}`,
         distStr
       ]
     })
+
 
     autoTable(doc, {
       startY: nextY + 4,
@@ -1000,32 +1010,51 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                     </h4>
                     <div className="divide-y divide-white/[0.06] space-y-3">
                       {breakdownData.consolidatedPayouts.map((p: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-start pt-3 first:pt-0">
-                          <div>
-                            <p className="text-sm font-bold text-white">{p.name}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {p.type === "INVESTOR" ? "Inversionista Externo" :
-                               p.type === "COMPANY" ? "JyJ (Capital propio + Comisiones)" :
-                               p.type === "SECRETARY" ? "Secretaría (Comisión Colocación/Cobranza)" : "Comisión por Referido (3%)"}
-                            </p>
-                            {/* Desglose individual de qué créditos aporta a esta transferencia */}
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              {p.details.map((det: any, dIdx: number) => (
-                                <span key={dIdx} className="text-[9px] bg-white/[0.04] border border-white/[0.06] text-slate-300 px-2 py-0.5 rounded font-mono">
-                                  {det.clientName}: ${(det.total / 100).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
-                                </span>
-                              ))}
+                        <div key={idx} className="pt-3 first:pt-0">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-white">{p.name}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {p.type === "INVESTOR" ? "Inversionista Externo" :
+                                 p.type === "COMPANY" ? "JyJ (Capital propio + Comisiones)" :
+                                 p.type === "SECRETARY" ? "Secretaría (Comisión Colocación/Cobranza)" : "Comisión por Referido (3%)"}
+                              </p>
+                              {/* Desglose Capital vs Rentabilidad */}
+                              {(p.capitalTotal > 0 || p.interestTotal > 0) && (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {p.capitalTotal > 0 && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] bg-blue-500/10 border border-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-mono">
+                                      🏦 Capital: ${(p.capitalTotal / 100).toLocaleString('es-CO')}
+                                    </span>
+                                  )}
+                                  {p.interestTotal > 0 && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono">
+                                      📈 Rentabilidad: ${(p.interestTotal / 100).toLocaleString('es-CO')}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {/* Desglose individual por crédito */}
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {p.details.map((det: any, dIdx: number) => (
+                                  <span key={dIdx} className="text-[9px] bg-white/[0.04] border border-white/[0.06] text-slate-300 px-2 py-0.5 rounded font-mono">
+                                    {det.clientName}: ${(det.total / 100).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <span className="text-base font-extrabold text-pink-400 font-mono">
-                              ${(p.amount / 100).toLocaleString('es-CO')}
-                            </span>
+                            <div className="text-right flex-shrink-0 ml-4">
+                              <span className="text-base font-extrabold text-pink-400 font-mono">
+                                ${(p.amount / 100).toLocaleString('es-CO')}
+                              </span>
+                              <p className="text-[9px] text-muted-foreground mt-0.5">Total a transferir</p>
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
+
                 </div>
               ) : (
                 <div className="space-y-6">

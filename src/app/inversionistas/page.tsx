@@ -114,7 +114,16 @@ export default async function InversionistasPage() {
                               </div>
                             </td>
 
-                            <td className="px-6 py-4 text-white font-mono text-xs">{investor.phone || "N/A"}</td>
+                            <td className="px-6 py-4 text-white font-mono text-xs">
+                              <div>{investor.phone || "Sin teléfono"}</div>
+                              {(investor as any).transferKey && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <span className="text-[9px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-mono">
+                                    🔑 {(investor as any).transferKey}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
                             
                             <td className="px-6 py-4">
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
@@ -137,12 +146,13 @@ export default async function InversionistasPage() {
                                 </Link>
                                 {session?.role === "ADMIN" && (
                                   <>
-                                    <EditInvestorModal investor={{ id: investor.id, name: investor.name, phone: investor.phone, email: investor.email }} />
+                                    <EditInvestorModal investor={{ id: investor.id, name: investor.name, phone: investor.phone, email: investor.email, transferKey: (investor as any).transferKey || null }} />
                                     <DeleteInvestorButton id={investor.id} />
                                   </>
                                 )}
                               </div>
                             </td>
+
                           </tr>
                         )
                       })
