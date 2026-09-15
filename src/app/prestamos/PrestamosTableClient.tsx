@@ -652,7 +652,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
       else if (p.type === "REFERRER") concept = "Comisión Referido (3%)"
       return [
         (idx + 1).toString(),
-        p.name,
+        p.transferKey ? `${p.name}\n🔑 ${p.transferKey}` : p.name,
         concept,
         p.capitalTotal > 0 ? `$${(p.capitalTotal / 100).toLocaleString('es-CO')}` : "-",
         p.interestTotal > 0 ? `$${(p.interestTotal / 100).toLocaleString('es-CO')}` : "-",
@@ -662,7 +662,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
     autoTable(doc, {
       startY: 42,
-      head: [['#', 'Destinatario', 'Concepto', 'Capital', 'Rentabilidad', 'Total a Transferir']],
+      head: [['#', 'Destinatario / Llave', 'Concepto', 'Capital', 'Rentabilidad', 'Total a Transferir']],
       body: consolidatedRows,
       theme: 'grid',
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
@@ -1019,6 +1019,12 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                                  p.type === "COMPANY" ? "JyJ (Capital propio + Comisiones)" :
                                  p.type === "SECRETARY" ? "Secretaría (Comisión Colocación/Cobranza)" : "Comisión por Referido (3%)"}
                               </p>
+                              {/* Llave de transferencia */}
+                              {p.transferKey && (
+                                <p className="text-[10px] text-amber-400 font-mono mt-1 flex items-center gap-1">
+                                  🔑 Enviar a: <span className="font-bold">{p.transferKey}</span>
+                                </p>
+                              )}
                               {/* Desglose Capital vs Rentabilidad */}
                               {(p.capitalTotal > 0 || p.interestTotal > 0) && (
                                 <div className="flex flex-wrap gap-2 mt-2">

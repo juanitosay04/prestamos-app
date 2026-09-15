@@ -1147,7 +1147,7 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
     }
 
     const details: any[] = []
-    const consolidatedMap: Record<string, { name: string, type: string, amount: number, capitalTotal: number, interestTotal: number, details: any[] }> = {}
+    const consolidatedMap: Record<string, { name: string, type: string, amount: number, capitalTotal: number, interestTotal: number, transferKey?: string | null, details: any[] }> = {}
 
     for (const loan of loans) {
       // Buscar la última cuota pagada
@@ -1208,7 +1208,15 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
 
         // Acumular en consolidados
         if (!consolidatedMap[inv.investorId]) {
-          consolidatedMap[inv.investorId] = { name: inv.investor.name, type: "INVESTOR", amount: 0, capitalTotal: 0, interestTotal: 0, details: [] }
+          consolidatedMap[inv.investorId] = { 
+            name: inv.investor.name, 
+            type: "INVESTOR", 
+            amount: 0, 
+            capitalTotal: 0, 
+            interestTotal: 0, 
+            transferKey: (inv.investor as any).transferKey || null,
+            details: [] 
+          }
         }
         consolidatedMap[inv.investorId].amount += totalPayout
         consolidatedMap[inv.investorId].capitalTotal += capitalPayout
@@ -1271,9 +1279,10 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
         const refName = referrer ? referrer.name : "Inversionista Referidor"
         const refKey = `ref-${loan.referredByInvestorId}`
         if (!consolidatedMap[refKey]) {
-          consolidatedMap[refKey] = { name: `${refName} (Comisión Referido 3%)`, type: "REFERRER", amount: 0, details: [] }
+          consolidatedMap[refKey] = { name: `${refName} (Comisión Referido 3%)`, type: "REFERRER", amount: 0, capitalTotal: 0, interestTotal: 0, details: [] }
         }
         consolidatedMap[refKey].amount += refComm
+        consolidatedMap[refKey].interestTotal += refComm
         consolidatedMap[refKey].details.push({
           clientName: `${loan.client.firstName} ${loan.client.lastName}`,
           loanId: loan.id,
