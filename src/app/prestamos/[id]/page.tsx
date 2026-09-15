@@ -13,6 +13,7 @@ import { PrintInternalSettlementButton } from "./PrintInternalSettlementButton"
 import { PrincipalPaymentButton } from "./PrincipalPaymentButton"
 import { MarkDefaultedButton, ReviveLoanButton } from "./DefaultLoanButtons"
 import { PromissoryNoteCard } from "./PromissoryNoteCard"
+import { EarlyPayoffButton } from "./EarlyPayoffButton"
 import { getSession } from "@/lib/session"
 
 export default async function LoanDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -272,6 +273,7 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                       outstandingPrincipal={outstandingPrincipal}
                       outstandingLateFee={outstandingLateFee}
                     />
+                    <EarlyPayoffButton loanId={loan.id} />
                     {role === "ADMIN" && <MarkDefaultedButton loanId={loan.id} />}
                   </div>
                 ) : loan.status === "DEFAULTED" && role === "ADMIN" ? (

@@ -420,3 +420,238 @@ export async function getBatchInstallmentsInfo(loanIds: string[]) {
     return { error: "Error interno obteniendo información de cuotas" }
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGO TOTAL ANTICIPADO
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calcula cuánto debe pagar el cliente si quiere saldar el préstamo hoy.
+ * Devuelve un preview sin modificar nada en la BD.
+ */
+export async function calculateEarlyPayoff(loanId: string) {
+  try {
+    const loan = await prisma.loan.findUnique({
+      where: { id: loanId },
+      include: {
+        client: true,
+        installments: { orderBy: { installmentNumber: "asc" } },
+        investors: { include: { investor: true } }
+      }
+    })
+
+    if (!loan) return { error: "Préstamo no encontrado" }
+    if (loan.status === "PAID") return { error: "Este préstamo ya está completamente pagado" }
+    if (loan.status === "DEFAULTED") return { error: "Este préstamo está en mora definitiva" }
+    if (loan.status === "REFINANCED") return { error: "Este préstamo fue refinanciado" }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const paidInstallments = loan.installments.filter(i => i.status === "PAID")
+    const pendingInstallments = loan.installments.filter(i => i.status !== "PAID")
+
+    if (pendingInstallments.length === 0) return { error: "No hay cuotas pendientes" }
+
+    // ── 1. Capital pendiente total ──────────────────────────────────────────
+    let remainingPrincipal = 0
+    for (const inst of pendingInstallments) {
+      if (inst.status === "PARTIAL") {
+        // Descontar lo ya pagado: primero va a interés, luego a capital
+        const paidToInterest = Math.min(inst.amountPaid, inst.interestPart)
+        const paidToPrincipal = Math.max(0, inst.amountPaid - paidToInterest)
+        remainingPrincipal += Math.max(0, inst.principalPart - paidToPrincipal)
+      } else {
+        remainingPrincipal += inst.principalPart
+      }
+    }
+
+    // ── 2. Interés proporcional al tiempo transcurrido ──────────────────────
+    // Tomamos la fecha de la última cuota pagada (o la fecha de inicio del préstamo)
+    // y calculamos los días hasta hoy dentro del período actual.
+    const lastPaidDate = paidInstallments.length > 0
+      ? new Date(paidInstallments[paidInstallments.length - 1].dueDate)
+      : new Date(loan.startDate)
+    lastPaidDate.setHours(0, 0, 0, 0)
+
+    // Próxima cuota pendiente (puede ser PARTIAL o PENDING)
+    const nextInstallment = pendingInstallments[0]
+    const nextDueDate = new Date(nextInstallment.dueDate)
+    nextDueDate.setHours(0, 0, 0, 0)
+
+    // Días del período completo (del vencimiento anterior al siguiente)
+    const periodDays = Math.max(1, Math.round(
+      (nextDueDate.getTime() - lastPaidDate.getTime()) / (1000 * 60 * 60 * 24)
+    ))
+
+    // Días transcurridos dentro de ese período hasta hoy
+    const elapsedDays = Math.max(0, Math.round(
+      (today.getTime() - lastPaidDate.getTime()) / (1000 * 60 * 60 * 24)
+    ))
+
+    // Interés proporcional de la cuota en curso
+    const interestPerPeriod = nextInstallment.interestPart
+    const proratedInterest = Math.round(interestPerPeriod * (Math.min(elapsedDays, periodDays) / periodDays))
+
+    // Si la cuota ya venció, cobrar el interés completo de ese período
+    const effectiveInterest = today >= nextDueDate ? interestPerPeriod : proratedInterest
+
+    // ── 3. Moras acumuladas en cuotas vencidas ──────────────────────────────
+    const accumulatedLateFees = pendingInstallments.reduce((sum, i) => sum + (i.lateFee || 0), 0)
+
+    // ── 4. Totales ──────────────────────────────────────────────────────────
+    const totalEarlyPayoff = remainingPrincipal + effectiveInterest + accumulatedLateFees
+
+    // ── 5. Comparación: cuánto pagaría si termina el plazo completo ─────────
+    const totalIfFullTerm = pendingInstallments.reduce((sum, i) => sum + i.expectedAmount + (i.lateFee || 0), 0)
+    const savings = Math.max(0, totalIfFullTerm - totalEarlyPayoff)
+
+    return {
+      success: true,
+      data: {
+        loanId: loan.id,
+        clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+        remainingPrincipal,
+        proratedInterest: effectiveInterest,
+        accumulatedLateFees,
+        totalEarlyPayoff,
+        totalIfFullTerm,
+        savings,
+        pendingCount: pendingInstallments.length,
+        paidCount: paidInstallments.length,
+        elapsedDays,
+        periodDays,
+        calculatedAt: today.toISOString()
+      }
+    }
+  } catch (error: any) {
+    console.error("Error calculating early payoff:", error)
+    return { error: "Error al calcular el pago anticipado" }
+  }
+}
+
+/**
+ * Confirma y ejecuta el pago total anticipado.
+ * Marca todas las cuotas pendientes como PAID con los valores reales cobrados
+ * y cierra el préstamo.
+ */
+export async function confirmEarlyPayoff(loanId: string, totalAmountPaid: number) {
+  try {
+    const loan = await prisma.loan.findUnique({
+      where: { id: loanId },
+      include: {
+        client: true,
+        installments: { orderBy: { installmentNumber: "asc" } },
+        investors: { include: { investor: true } }
+      }
+    })
+
+    if (!loan) return { error: "Préstamo no encontrado" }
+    if (loan.status === "PAID") return { error: "Este préstamo ya está pagado" }
+
+    const pendingInstallments = loan.installments.filter(i => i.status !== "PAID")
+    if (pendingInstallments.length === 0) return { error: "No hay cuotas pendientes" }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Distribuir el monto pagado entre las cuotas pendientes.
+      //    La primera cuota recibe el monto proporcional real (capital + interés prorrateado).
+      //    Las restantes solo reciben su capital (interés condonado).
+      let amountLeft = totalAmountPaid
+
+      for (let i = 0; i < pendingInstallments.length; i++) {
+        const inst = pendingInstallments[i]
+        const isFirst = i === 0
+
+        // Para la primera cuota, cobrar el monto real (lo que el cliente paga).
+        // Para las siguientes, solo acreditar el principal.
+        let toPay: number
+        if (isFirst) {
+          // Primer cuota pendiente: cobrar lo que queda de amountLeft hasta su expectedAmount
+          toPay = Math.min(amountLeft, inst.expectedAmount + (inst.lateFee || 0))
+        } else {
+          // Cuotas futuras: solo se liquida el capital (interés se condona)
+          toPay = inst.principalPart
+        }
+
+        const newAmountPaid = inst.amountPaid + toPay
+        amountLeft = Math.max(0, amountLeft - toPay)
+
+        await tx.installment.update({
+          where: { id: inst.id },
+          data: {
+            status: "PAID",
+            amountPaid: newAmountPaid,
+            // Para cuotas futuras marcamos el interés como 0 (condonado)
+            interestPart: isFirst ? inst.interestPart : 0,
+            // Ajustar el expectedAmount a lo que realmente se cobró
+            expectedAmount: isFirst ? (inst.expectedAmount + (inst.lateFee || 0)) : inst.principalPart,
+            updatedAt: new Date()
+          }
+        })
+
+        // Registrar el pago
+        await tx.payment.create({
+          data: {
+            loanId: loanId,
+            installmentId: inst.id,
+            amountPaid: toPay,
+            paymentDate: new Date(),
+            isPartial: false,
+            lateFeeApplied: isFirst ? (inst.lateFee || 0) : 0
+          }
+        })
+      }
+
+      // 2. Marcar el préstamo como PAGADO
+      await tx.loan.update({
+        where: { id: loanId },
+        data: { status: "PAID" }
+      })
+
+      // 3. Generar gasto de comisión de secretaría
+      await generateSecretaryCommissionExpense(tx, loanId)
+
+      // 4. Registro de auditoría
+      await tx.auditLog.create({
+        data: {
+          userId: "system",
+          action: "EARLY_PAYOFF",
+          entityType: "Loan",
+          entityId: loanId,
+          details: JSON.stringify({
+            totalAmountPaid,
+            pendingInstallments: pendingInstallments.length,
+            paidAt: new Date().toISOString()
+          })
+        }
+      })
+    })
+
+    // 5. Notificación Telegram
+    try {
+      const operator = await getCurrentUserSummary()
+      const { notifyPaymentReceived } = await import("@/lib/telegram")
+      notifyPaymentReceived({
+        loanId,
+        clientName: `${loan.client.firstName} ${loan.client.lastName}`,
+        installmentNumber: loan.installments.length,
+        totalInstallments: loan.installments.length,
+        amountPaid: totalAmountPaid,
+        lateFee: 0,
+        remainingLoanBalance: 0,
+        isFullyPaid: true,
+        performedBy: operator.label
+      }).catch(console.error)
+    } catch (_) {}
+
+    revalidatePath(`/prestamos/${loanId}`)
+    revalidatePath("/prestamos")
+    revalidatePath("/", "layout")
+
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error confirming early payoff:", error)
+    return { error: "Error al procesar el pago anticipado: " + error.message }
+  }
+}
+
