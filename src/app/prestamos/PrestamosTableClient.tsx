@@ -27,6 +27,8 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
   const [breakdownModalOpen, setBreakdownModalOpen] = useState(false)
   const [breakdownData, setBreakdownData] = useState<{ loansBreakdown: any[], consolidatedPayouts: any[] } | null>(null)
   const [breakdownActiveTab, setBreakdownActiveTab] = useState<"consolidated" | "details">("consolidated")
+  const [selectedInstallmentNums, setSelectedInstallmentNums] = useState<Record<string, number>>({}) // loanId -> installmentNumber
+  const [reloadingBreakdown, setReloadingBreakdown] = useState(false)
 
   const printSingleRef = useRef<HTMLDivElement>(null)
   const printBatchRef = useRef<HTMLDivElement>(null)
@@ -53,7 +55,17 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     setTimeout(() => {
       setBreakdownData(null)
       setBreakdownActiveTab("consolidated")
+      setSelectedInstallmentNums({})
     }, 250)
+  }
+
+  const reloadBreakdownWithSelection = async (loanId: string, installmentNumber: number) => {
+    const newSelection = { ...selectedInstallmentNums, [loanId]: installmentNumber }
+    setSelectedInstallmentNums(newSelection)
+    setReloadingBreakdown(true)
+    const res = await getBatchInstallmentBreakdown(selectedIds, newSelection)
+    setReloadingBreakdown(false)
+    if (res.data) setBreakdownData(res.data)
   }
 
   useEffect(() => {
@@ -1067,16 +1079,37 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                   {breakdownData.loansBreakdown.map((l: any, idx: number) => (
                     <div key={idx} className="bg-slate-900/60 border border-white/[0.08] rounded-xl p-5 space-y-4 text-left">
                       {/* Header de deudor */}
-                      <div className="flex justify-between items-center border-b border-white/[0.06] pb-3">
+                      <div className="flex justify-between items-start border-b border-white/[0.06] pb-3 gap-3">
                         <div>
                           <h4 className="text-sm font-extrabold text-white">{l.clientName}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5 font-mono">
                             Ref: #{l.loanId.slice(-8).toUpperCase()} • CC: {l.idDocument}
                           </p>
                         </div>
-                        <span className="bg-pink-500/10 text-pink-400 border border-pink-500/20 px-2.5 py-1 rounded-lg text-xs font-semibold font-mono">
-                          Cuota #{l.installmentNumber} Pagada
-                        </span>
+                        {/* Selector de cuota histórica */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {l.availableInstallments?.length > 1 ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <label className="text-[9px] text-muted-foreground uppercase tracking-wider">Ver cuota:</label>
+                              <select
+                                value={selectedInstallmentNums[l.loanId] ?? l.installmentNumber}
+                                onChange={(e) => reloadBreakdownWithSelection(l.loanId, Number(e.target.value))}
+                                disabled={reloadingBreakdown}
+                                className="bg-slate-800 border border-white/10 text-white text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-pink-500 disabled:opacity-50"
+                              >
+                                {l.availableInstallments.map((ai: any) => (
+                                  <option key={ai.number} value={ai.number}>
+                                    Cuota #{ai.number}{ai.lateFee > 0 ? ` (+mora $${(ai.lateFee/100).toLocaleString('es-CO')})` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <span className="bg-pink-500/10 text-pink-400 border border-pink-500/20 px-2.5 py-1 rounded-lg text-xs font-semibold font-mono">
+                              Cuota #{l.installmentNumber} Pagada
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Caja de recaudo y amortización */}

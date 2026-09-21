@@ -116,28 +116,13 @@ async function executeClosure(monthIndex: number, year: number, descriptionTag: 
     totalJyjProfit += profitForThisPayment
   }
 
-  // 3. Calculate 16% payroll for owners
-  if (totalJyjProfit > 0) {
-    const payrollAmount = Math.round(totalJyjProfit * 0.16)
-
-    // 4. Register Expense
-    await prisma.expense.create({
-      data: {
-        description: `Pago de nómina a dueños de la empresa (Juanes) - ${descriptionTag}`,
-        amount: payrollAmount,
-        category: "SALARY",
-        date: new Date() // El gasto se registra con la fecha en que se corrió el proceso
-      }
-    })
-  } else {
-    // Si la ganancia fue 0, igual registramos el cierre para que no lo vuelva a correr
-    await prisma.expense.create({
-      data: {
-        description: `Cierre en cero - Pago de nómina a dueños (Juanes) - ${descriptionTag}`,
-        amount: 0,
-        category: "SALARY",
-        date: new Date()
-      }
-    })
-  }
+  // Registrar el cierre del mes (sin gasto de nómina automático)
+  await prisma.expense.create({
+    data: {
+      description: `Cierre ${descriptionTag} - Ganancia JyJ: $${(totalJyjProfit / 100).toLocaleString('es-CO')}`,
+      amount: 0,
+      category: "OTHER",
+      date: new Date()
+    }
+  })
 }

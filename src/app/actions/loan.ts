@@ -1131,7 +1131,10 @@ export async function getInternalSettlementData(loanIds: string[]) {
   }
 }
 
-export async function getBatchInstallmentBreakdown(loanIds: string[]) {
+export async function getBatchInstallmentBreakdown(
+  loanIds: string[],
+  selectedInstallments?: Record<string, number> // loanId -> installmentNumber (for historical breakdown)
+) {
   try {
     const loans = await prisma.loan.findMany({
       where: { id: { in: loanIds } },
@@ -1150,13 +1153,23 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
     const consolidatedMap: Record<string, { name: string, type: string, amount: number, capitalTotal: number, interestTotal: number, transferKey?: string | null, details: any[] }> = {}
 
     for (const loan of loans) {
-      // Buscar la última cuota pagada
+      // Buscar cuotas pagadas
       const paidInstallments = loan.installments.filter(i => i.status === "PAID")
       if (paidInstallments.length === 0) {
         continue // No tiene cuotas pagadas aún
       }
 
-      const installment = paidInstallments[paidInstallments.length - 1] // La más reciente
+      // Si se especificó un número de cuota para este préstamo, usarla; si no, la última pagada
+      let installment
+      const requestedNum = selectedInstallments?.[loan.id]
+      if (requestedNum) {
+        installment = paidInstallments.find(i => i.installmentNumber === requestedNum)
+      }
+      if (!installment) {
+        installment = paidInstallments[paidInstallments.length - 1] // La más reciente
+      }
+
+      // Usar la mora REAL registrada en la cuota (la que efectivamente se cobró)
       const totalInterest = installment.interestPart + (installment.lateFee || 0)
 
       // 1. Comisión secretaria
@@ -1296,11 +1309,18 @@ export async function getBatchInstallmentBreakdown(loanIds: string[]) {
         clientName: `${loan.client.firstName} ${loan.client.lastName}`,
         idDocument: loan.client.idDocument,
         installmentNumber: installment.installmentNumber,
+        totalPaidInstallments: paidInstallments.length,
+        availableInstallments: paidInstallments.map(i => ({
+          number: i.installmentNumber,
+          dueDate: i.dueDate,
+          amountPaid: i.amountPaid,
+          lateFee: i.lateFee || 0
+        })),
         expectedAmount: installment.expectedAmount,
         amountPaid: installment.amountPaid,
         principalPart: installment.principalPart,
         interestPart: installment.interestPart,
-        lateFee: installment.lateFee,
+        lateFee: installment.lateFee || 0,
         totalInterest,
         secretaryCommission: secComm,
         companyCommission: jyjComm,
