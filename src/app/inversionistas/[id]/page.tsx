@@ -1,12 +1,17 @@
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Header } from "@/components/layout/Header"
 import { getInvestorById } from "@/app/actions/investor"
+import { getInvestorPortalAccess } from "@/app/actions/investorPortal"
+import { getSession } from "@/lib/session"
 import { ArrowLeft, Wallet, Briefcase, Calendar, CheckCircle2, AlertCircle } from "lucide-react"
 import Link from "next/link"
+import { InvestorPortalAccessCard } from "./InvestorPortalAccessCard"
 
 export default async function InvestorDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const investor = await getInvestorById(id)
+  const session = await getSession()
+  const portalUser = session?.role === "ADMIN" ? await getInvestorPortalAccess(id) : null
 
   if (!investor) {
     return (
@@ -94,6 +99,15 @@ export default async function InvestorDetailsPage({ params }: { params: Promise<
                 </div>
               </div>
             </div>
+
+            {/* Portal de acceso — solo visible para Admin */}
+            {session?.role === "ADMIN" && (
+              <InvestorPortalAccessCard
+                investorId={investor.id}
+                investorName={investor.name}
+                portalUser={portalUser}
+              />
+            )}
 
             <h2 className="text-xl font-bold text-white mt-10 mb-4">Desglose de Préstamos</h2>
             <div className="glass-panel rounded-2xl overflow-hidden border border-white/5">

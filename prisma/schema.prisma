@@ -14,7 +14,8 @@ model User {
   name          String
   email         String    @unique
   passwordHash  String
-  role          String    @default("SECRETARY") // ADMIN o SECRETARY
+  role          String    @default("SECRETARY") // ADMIN, SECRETARY o INVESTOR
+  investorId    String?   // Vincula este usuario con un registro Investor (solo para rol INVESTOR)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?

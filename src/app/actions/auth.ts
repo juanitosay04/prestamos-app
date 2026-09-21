@@ -47,6 +47,7 @@ export async function login(formData: FormData) {
     name: user.name,
     email: user.email,
     role: user.role,
+    investorId: user.investorId ?? null,
   }
 
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
@@ -61,6 +62,10 @@ export async function login(formData: FormData) {
     path: "/",
   })
 
+  // Redirigir según el rol
+  if (user.role === "INVESTOR") {
+    redirect("/portal")
+  }
   redirect("/")
 }
 

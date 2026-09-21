@@ -16,17 +16,33 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isPublicRoute && session) {
+    // Redirigir al portal correcto según el rol
+    if (session.role === "INVESTOR") {
+      return NextResponse.redirect(new URL("/portal", request.url))
+    }
     return NextResponse.redirect(new URL("/", request.url))
   }
 
-  // RBAC: Secretarias no pueden entrar a gastos ni configuracion
-  if (session && session.role !== "ADMIN") {
-    if (path.startsWith("/gastos") || path.startsWith("/configuracion")) {
-      return NextResponse.redirect(new URL("/", request.url))
+  if (session) {
+    // INVESTOR: solo puede acceder a /portal
+    if (session.role === "INVESTOR") {
+      if (!path.startsWith("/portal")) {
+        return NextResponse.redirect(new URL("/portal", request.url))
+      }
+    } else {
+      // ADMIN / SECRETARY: no pueden acceder al portal de inversionistas
+      if (path.startsWith("/portal")) {
+        return NextResponse.redirect(new URL("/", request.url))
+      }
+      // Secretarias no pueden entrar a gastos ni configuracion
+      if (session.role !== "ADMIN") {
+        if (path.startsWith("/gastos") || path.startsWith("/configuracion")) {
+          return NextResponse.redirect(new URL("/", request.url))
+        }
+      }
     }
   }
 
-  // Inject session data into headers for the app
   const response = NextResponse.next()
   if (session) {
     response.headers.set("x-user-role", session.role)

@@ -11,6 +11,7 @@ export type SessionPayload = {
   name?: string
   email: string
   role: string
+  investorId?: string | null
 }
 
 export async function encrypt(payload: SessionPayload) {
@@ -60,8 +61,8 @@ export async function getCurrentUserSummary(): Promise<{ id?: string; name: stri
     }
     
     const displayName = name || session.email.split("@")[0] || "Usuario"
-    const roleIcon = role === "ADMIN" ? "👑" : "💼"
-    const roleText = role === "ADMIN" ? "Admin" : "Secretaría"
+    const roleIcon = role === "ADMIN" ? "👑" : role === "INVESTOR" ? "💰" : "💼"
+    const roleText = role === "ADMIN" ? "Admin" : role === "INVESTOR" ? "Inversionista" : "Secretaría"
     
     return {
       id: session.userId,
