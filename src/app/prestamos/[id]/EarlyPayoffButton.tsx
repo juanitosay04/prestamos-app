@@ -139,7 +139,7 @@ export function EarlyPayoffButton({ loanId }: { loanId: string }) {
                       <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
                         <Info className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
                         <p className="text-[11px] text-amber-200 leading-relaxed">
-                          Si el cliente paga <strong>hoy</strong>, solo se le cobra el interés proporcional a los días transcurridos del período actual. Los intereses futuros se condonan.
+                          Se cobran <strong>todas las cuotas pendientes</strong> a su valor completo pactado al inicio del préstamo. El préstamo quedará saldado en su totalidad.
                         </p>
                       </div>
 
@@ -149,28 +149,23 @@ export function EarlyPayoffButton({ loanId }: { loanId: string }) {
                           <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Desglose del monto a pagar</h4>
                         </div>
                         <div className="p-4 space-y-3">
-                          
+
                           {/* Capital */}
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
                               <DollarSign className="h-3.5 w-3.5 text-blue-400" />
                               <span className="text-sm text-slate-300">Capital pendiente</span>
                             </div>
-                            <span className="font-mono font-bold text-blue-400 text-sm">{fmt(payoffData.remainingPrincipal)}</span>
+                            <span className="font-mono font-bold text-blue-400 text-sm">{fmt(payoffData.remainingCapital)}</span>
                           </div>
 
-                          {/* Interés prorrateado */}
+                          {/* Interés completo */}
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
                               <TrendingDown className="h-3.5 w-3.5 text-emerald-400" />
-                              <div>
-                                <span className="text-sm text-slate-300">Interés a hoy</span>
-                                <span className="text-[10px] text-muted-foreground ml-1.5">
-                                  ({payoffData.elapsedDays} de {payoffData.periodDays} días del período)
-                                </span>
-                              </div>
+                              <span className="text-sm text-slate-300">Intereses pactados</span>
                             </div>
-                            <span className="font-mono font-bold text-emerald-400 text-sm">{fmt(payoffData.proratedInterest)}</span>
+                            <span className="font-mono font-bold text-emerald-400 text-sm">{fmt(payoffData.remainingInterest)}</span>
                           </div>
 
                           {/* Mora si aplica */}
@@ -186,27 +181,16 @@ export function EarlyPayoffButton({ loanId }: { loanId: string }) {
 
                           {/* Total */}
                           <div className="border-t border-white/[0.08] pt-3 flex justify-between items-center">
-                            <span className="text-sm font-bold text-white">Total a Pagar Hoy</span>
+                            <span className="text-sm font-bold text-white">Total a Pagar</span>
                             <span className="font-mono font-extrabold text-amber-400 text-lg">{fmt(payoffData.totalEarlyPayoff)}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Comparación vs pagar todo */}
-                      {payoffData.savings > 0 && (
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex justify-between items-center">
-                          <div>
-                            <p className="text-xs font-semibold text-emerald-300">💰 Ahorro del cliente vs. pagar todas las cuotas</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Si continuara: {fmt(payoffData.totalIfFullTerm)}</p>
-                          </div>
-                          <span className="font-mono font-extrabold text-emerald-400 text-base">{fmt(payoffData.savings)}</span>
-                        </div>
-                      )}
-
                       {/* Info cuotas */}
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                         <Calendar className="h-3.5 w-3.5" />
-                        <span>{payoffData.paidCount} cuota(s) pagadas • {payoffData.pendingCount} cuota(s) pendiente(s) se liquidarán</span>
+                        <span>{payoffData.paidCount} cuota(s) ya pagadas · {payoffData.pendingCount} cuota(s) pendientes se saldan ahora</span>
                       </div>
 
                       {/* Botón confirmar */}
