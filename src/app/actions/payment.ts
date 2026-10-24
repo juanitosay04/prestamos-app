@@ -96,7 +96,7 @@ export async function payInstallment(installmentId: string, lateFeeInCents: numb
           .filter(i => i.status !== "PAID")
           .reduce((sum, i) => sum + (i.expectedAmount - i.amountPaid), 0)
         
-        notifyPaymentReceived({
+        await notifyPaymentReceived({
           loanId: loanInfo.id,
           clientName: `${loanInfo.client.firstName} ${loanInfo.client.lastName}`,
           installmentNumber: installment.installmentNumber,
@@ -291,7 +291,7 @@ export async function processBatchInstallments(loanIds: string[]) {
       if (successful.length > 0) {
         const totalAmount = successful.reduce((sum, r) => sum + (r.amountPaid || 0), 0)
         const clientNames = successful.map(r => r.clientName).filter(Boolean) as string[]
-        notifyBatchPayments({
+        await notifyBatchPayments({
           processedCount: successful.length,
           totalAmount,
           clients: clientNames,
@@ -556,26 +556,28 @@ export async function confirmEarlyPayoff(loanId: string, totalAmountPaid: number
       await generateSecretaryCommissionExpense(tx, loanId)
 
       // 4. Registro de auditoría
-      await tx.auditLog.create({
-        data: {
-          userId: "system",
-          action: "EARLY_PAYOFF",
-          entityType: "Loan",
-          entityId: loanId,
-          details: JSON.stringify({
-            totalAmountPaid,
-            pendingInstallments: pendingInstallments.length,
-            paidAt: new Date().toISOString()
-          })
-        }
-      })
+      const session = await getSession()
+      if (session?.userId) {
+        await tx.auditLog.create({
+          data: {
+            userId: session.userId,
+            action: "EARLY_PAYOFF",
+            entityType: "Loan",
+            entityId: loanId,
+            details: JSON.stringify({
+              totalAmountPaid,
+              pendingInstallments: pendingInstallments.length,
+              paidAt: new Date().toISOString()
+            })
+          }
+        })
+      }
     })
 
     // 5. Notificación Telegram
     try {
       const operator = await getCurrentUserSummary()
-      const { notifyPaymentReceived } = await import("@/lib/telegram")
-      notifyPaymentReceived({
+      await notifyPaymentReceived({
         loanId,
         clientName: `${loan.client.firstName} ${loan.client.lastName}`,
         installmentNumber: loan.installments.length,

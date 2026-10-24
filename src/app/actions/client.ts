@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { getSession, getCurrentUserSummary } from "@/lib/session"
-import { notifyClientCreated, notifyClientDeleted } from "@/lib/telegram"
+import { notifyClientCreated, notifyClientDeleted, notifyClientUpdated, notifyClientBlacklisted } from "@/lib/telegram"
 
 export async function getClients() {
   try {
@@ -63,7 +63,7 @@ export async function createClient(formData: FormData) {
       })
     }
     
-    notifyClientCreated({
+    await notifyClientCreated({
       clientId: client.id,
       clientName: `${firstName} ${lastName}`,
       idDocument,
@@ -93,7 +93,7 @@ export async function deleteClient(id: string) {
 
     if (client) {
       const operator = await getCurrentUserSummary()
-      notifyClientDeleted({
+      await notifyClientDeleted({
         clientId: client.id,
         clientName: `${client.firstName} ${client.lastName}`,
         idDocument: client.idDocument,
@@ -115,10 +115,18 @@ export async function toggleClientBlacklist(id: string, isBlacklisted: boolean) 
       return { error: "No autorizado" }
     }
 
-    await prisma.client.update({
+    const client = await prisma.client.update({
       where: { id },
       data: { isBlacklisted }
     })
+
+    const operator = await getCurrentUserSummary()
+    await notifyClientBlacklisted({
+      clientName: `${client.firstName} ${client.lastName}`,
+      idDocument: client.idDocument,
+      isBlacklisted,
+      performedBy: operator.label
+    }).catch(err => console.error("Telegram notifyClientBlacklisted error:", err))
     
     revalidatePath("/clientes")
     return { success: true }
@@ -160,6 +168,7 @@ export async function updateClient(id: string, formData: FormData) {
     
     // Notificación / Auditoría
     const session = await getSession()
+    const operator = await getCurrentUserSummary()
     if (session) {
       await prisma.auditLog.create({
         data: {
@@ -171,6 +180,14 @@ export async function updateClient(id: string, formData: FormData) {
         }
       })
     }
+
+    await notifyClientUpdated({
+      clientId: client.id,
+      clientName: `${firstName} ${lastName}`,
+      idDocument,
+      phone,
+      performedBy: operator.label
+    }).catch(err => console.error("Telegram notifyClientUpdated error:", err))
     
     revalidatePath("/clientes")
     revalidatePath(`/clientes/${id}`)

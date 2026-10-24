@@ -30,7 +30,7 @@ export async function createExpense(formData: FormData) {
     })
 
     const operator = await getCurrentUserSummary()
-    notifyExpenseCreated({
+    await notifyExpenseCreated({
       expenseId: expense.id,
       description,
       amount,
@@ -56,7 +56,7 @@ export async function deleteExpense(id: string) {
 
     if (expense) {
       const operator = await getCurrentUserSummary()
-      notifyExpenseDeleted({
+      await notifyExpenseDeleted({
         expenseId: expense.id,
         description: expense.description,
         amount: expense.amount,

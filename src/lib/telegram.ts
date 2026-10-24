@@ -422,3 +422,126 @@ export async function notifyExpenseDeleted(data: {
 
   return sendTelegramMessage(message)
 }
+
+/**
+ * ✏️ Notificación de Cliente Actualizado
+ */
+export async function notifyClientUpdated(data: {
+  clientId: string
+  clientName: string
+  idDocument: string
+  phone: string
+  performedBy?: string
+}) {
+  const message =
+    `✏️ <b>CLIENTE ACTUALIZADO</b>\n` +
+    `────────────────────\n` +
+    `👤 <b>Cliente:</b> ${data.clientName}\n` +
+    `📄 <b>Cédula:</b> <code>${data.idDocument}</code>\n` +
+    `📱 <b>Teléfono:</b> ${data.phone}\n` +
+    (data.performedBy ? `✍️ <b>Modificado por:</b> ${data.performedBy}\n` : "") +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * 🚫 Notificación de Cambio en Lista Negra de Cliente
+ */
+export async function notifyClientBlacklisted(data: {
+  clientName: string
+  idDocument: string
+  isBlacklisted: boolean
+  performedBy?: string
+}) {
+  const title = data.isBlacklisted
+    ? `🚫 <b>CLIENTE ENVIADO A LISTA NEGRA</b>`
+    : `✅ <b>CLIENTE REMOVIDO DE LISTA NEGRA</b>`
+
+  const message =
+    `${title}\n` +
+    `────────────────────\n` +
+    `👤 <b>Cliente:</b> ${data.clientName} (CC: <code>${data.idDocument}</code>)\n` +
+    (data.performedBy ? `👮‍♂️ <b>Acción realizada por:</b> ${data.performedBy}\n` : "") +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * ✏️ Notificación de Inversionista Actualizado
+ */
+export async function notifyInvestorUpdated(data: {
+  investorName: string
+  phone?: string
+  transferKey?: string
+  performedBy?: string
+}) {
+  const message =
+    `✏️ <b>INVERSIONISTA ACTUALIZADO</b>\n` +
+    `────────────────────\n` +
+    `👤 <b>Inversionista:</b> ${data.investorName}\n` +
+    (data.phone ? `📱 <b>Teléfono:</b> ${data.phone}\n` : "") +
+    (data.transferKey ? `🔑 <b>Llave:</b> <code>${data.transferKey}</code>\n` : "") +
+    (data.performedBy ? `✍️ <b>Modificado por:</b> ${data.performedBy}\n` : "") +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * ✏️ Notificación de Préstamo Editado
+ */
+export async function notifyLoanUpdated(data: {
+  loanId: string
+  clientName: string
+  principalAmount: number
+  numberOfInstallments: number
+  installmentAmount: number
+  performedBy?: string
+}) {
+  const message =
+    `✏️ <b>PRÉSTAMO EDITADO</b>\n` +
+    `────────────────────\n` +
+    `👤 <b>Cliente:</b> ${data.clientName}\n` +
+    `💰 <b>Capital:</b> <code>${formatMoney(data.principalAmount)}</code>\n` +
+    `📅 <b>Cuotas:</b> ${data.numberOfInstallments} cuotas de <code>${formatMoney(data.installmentAmount)}</code>\n` +
+    (data.performedBy ? `✍️ <b>Editado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>Ref:</b> <code>#${data.loanId.slice(-6).toUpperCase()}</code>\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
+
+  return sendTelegramMessage(message)
+}
+
+/**
+ * 📄 Notificación de Pagaré Subido o Eliminado
+ */
+export async function notifyPromissoryNoteEvent(data: {
+  loanId: string
+  clientName: string
+  action: "UPLOADED" | "DELETED"
+  fileName?: string
+  performedBy?: string
+}) {
+  const title =
+    data.action === "UPLOADED"
+      ? `📄 <b>PAGARÉ FIRMADO SUBIDO AL SISTEMA</b>`
+      : `🗑️ <b>PAGARÉ ELIMINADO DEL PRÉSTAMO</b>`
+
+  const message =
+    `${title}\n` +
+    `────────────────────\n` +
+    `👤 <b>Cliente:</b> ${data.clientName}\n` +
+    (data.fileName ? `📎 <b>Archivo:</b> <code>${data.fileName}</code>\n` : "") +
+    (data.performedBy ? `✍️ <b>Realizado por:</b> ${data.performedBy}\n` : "") +
+    `🆔 <b>Ref:</b> <code>#${data.loanId.slice(-6).toUpperCase()}</code>\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
+
+  return sendTelegramMessage(message)
+}
+

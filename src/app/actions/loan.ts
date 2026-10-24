@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache"
 import { getSession, getCurrentUserSummary } from "@/lib/session"
 import { generateSecretaryCommissionExpense } from "./payment"
 import { getSecretaryCommissionSettings, getCompanyCommissionSettings } from "./settings"
-import { notifyLoanCreated, notifyLoanRefinanced, notifyLoanDefaulted, notifyPrincipalPayment, notifyLoanRevived } from "@/lib/telegram"
+import { notifyLoanCreated, notifyLoanRefinanced, notifyLoanDefaulted, notifyPrincipalPayment, notifyLoanRevived, notifyLoanUpdated, notifyPromissoryNoteEvent } from "@/lib/telegram"
 
 export async function getLoans(month?: number, year?: number) {
   try {
@@ -69,7 +69,7 @@ export async function markLoanAsDefaulted(loanId: string) {
 
       // Notificación Telegram
       const operator = await getCurrentUserSummary()
-      notifyLoanDefaulted({
+      await notifyLoanDefaulted({
         loanId: loan.id,
         clientName: `${loan.client.firstName} ${loan.client.lastName}`,
         principalAmount: loan.principalAmount,
@@ -121,7 +121,7 @@ export async function reviveLoan(loanId: string) {
         include: { client: true }
       })
       if (loan) {
-        notifyLoanRevived({
+        await notifyLoanRevived({
           loanId: loan.id,
           clientName: `${loan.client.firstName} ${loan.client.lastName}`,
           performedBy: operator.label
@@ -396,7 +396,7 @@ export async function createLoan(data: any) {
         const clientName = `${clientInfo.firstName} ${clientInfo.lastName}`
         if (refinancedFromId) {
           const oldLoan = await prisma.loan.findUnique({ where: { id: refinancedFromId } })
-          notifyLoanRefinanced({
+          await notifyLoanRefinanced({
             newLoanId: loan.id,
             oldLoanId: refinancedFromId,
             clientName,
@@ -415,7 +415,7 @@ export async function createLoan(data: any) {
             })
             investorsSummary = invs.map(i => i.name).join(", ")
           }
-          notifyLoanCreated({
+          await notifyLoanCreated({
             loanId: loan.id,
             clientName,
             idDocument: clientInfo.idDocument,
@@ -679,7 +679,7 @@ export async function registerPrincipalPayment(
       })
       if (loanData) {
         const remainingP = loanData.installments.reduce((sum, inst) => sum + inst.principalPart, 0)
-        notifyPrincipalPayment({
+        await notifyPrincipalPayment({
           loanId,
           clientName: `${loanData.client.firstName} ${loanData.client.lastName}`,
           amountPaid: amountInCents,
@@ -868,6 +868,21 @@ export async function updateLoan(loanId: string, data: any) {
       }
     })
 
+    try {
+      const operator = await getCurrentUserSummary()
+      const updatedLoan = await prisma.loan.findUnique({ where: { id: loanId }, include: { client: true } })
+      if (updatedLoan) {
+        await notifyLoanUpdated({
+          loanId,
+          clientName: `${updatedLoan.client.firstName} ${updatedLoan.client.lastName}`,
+          principalAmount,
+          numberOfInstallments,
+          installmentAmount: fixedInstallmentAmount,
+          performedBy: operator.label
+        }).catch(console.error)
+      }
+    } catch (_) {}
+
     revalidatePath(`/prestamos/${loanId}`)
     revalidatePath("/prestamos")
     return { success: true }
@@ -908,6 +923,15 @@ export async function uploadPromissoryNote(loanId: string, fileDataUrl: string, 
       }
     })
 
+    const operator = await getCurrentUserSummary()
+    await notifyPromissoryNoteEvent({
+      loanId,
+      clientName: `${updatedLoan.client.firstName} ${updatedLoan.client.lastName}`,
+      action: "UPLOADED",
+      fileName,
+      performedBy: operator.label
+    }).catch(console.error)
+
     revalidatePath(`/prestamos/${loanId}`)
     revalidatePath("/prestamos")
     return { success: true }
@@ -924,13 +948,14 @@ export async function deletePromissoryNote(loanId: string) {
       return { error: "No autorizado" }
     }
 
-    await prisma.loan.update({
+    const updatedLoan = await prisma.loan.update({
       where: { id: loanId },
       data: {
         promissoryNoteUrl: null,
         promissoryNoteName: null,
         promissoryNoteUploadedAt: null
-      }
+      },
+      include: { client: true }
     })
 
     await prisma.auditLog.create({
@@ -942,6 +967,14 @@ export async function deletePromissoryNote(loanId: string) {
         details: JSON.stringify({ loanId })
       }
     })
+
+    const operator = await getCurrentUserSummary()
+    await notifyPromissoryNoteEvent({
+      loanId,
+      clientName: `${updatedLoan.client.firstName} ${updatedLoan.client.lastName}`,
+      action: "DELETED",
+      performedBy: operator.label
+    }).catch(console.error)
 
     revalidatePath(`/prestamos/${loanId}`)
     revalidatePath("/prestamos")

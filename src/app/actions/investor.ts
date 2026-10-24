@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { getSession, getCurrentUserSummary } from "@/lib/session"
-import { notifyInvestorCreated, notifyInvestorDeleted } from "@/lib/telegram"
+import { notifyInvestorCreated, notifyInvestorDeleted, notifyInvestorUpdated } from "@/lib/telegram"
 
 export async function getInvestors() {
   try {
@@ -77,7 +77,7 @@ export async function createInvestor(formData: FormData) {
       })
     }
     
-    notifyInvestorCreated({
+    await notifyInvestorCreated({
       investorId: investor.id,
       investorName: name,
       phone: phone || undefined,
@@ -113,6 +113,14 @@ export async function updateInvestor(id: string, formData: FormData) {
         transferKey: transferKey || null,
       }
     })
+
+    const operator = await getCurrentUserSummary()
+    await notifyInvestorUpdated({
+      investorName: name,
+      phone: phone || undefined,
+      transferKey: transferKey || undefined,
+      performedBy: operator.label
+    }).catch(err => console.error("Telegram notifyInvestorUpdated error:", err))
     
     revalidatePath("/inversionistas")
     revalidatePath(`/inversionistas/${id}`)
@@ -156,7 +164,7 @@ export async function deleteInvestor(id: string) {
     })
     
     const operator = await getCurrentUserSummary()
-    notifyInvestorDeleted({
+    await notifyInvestorDeleted({
       investorId: investor.id,
       investorName: investor.name,
       performedBy: operator.label
