@@ -7,6 +7,7 @@ import { getSession } from "@/lib/session"
 export interface TelegramSettingsData {
   botToken: string
   chatId: string
+  geminiApiKey?: string
   enabled: boolean
   notifyNewLoan: boolean
   notifyPayment: boolean
@@ -146,6 +147,7 @@ export async function getTelegramSettings(): Promise<TelegramSettingsData> {
           in: [
             "TELEGRAM_BOT_TOKEN",
             "TELEGRAM_CHAT_ID",
+            "GEMINI_API_KEY",
             "TELEGRAM_ENABLED",
             "TELEGRAM_NOTIFY_NEW_LOAN",
             "TELEGRAM_NOTIFY_PAYMENT",
@@ -161,6 +163,7 @@ export async function getTelegramSettings(): Promise<TelegramSettingsData> {
     return {
       botToken: map.get("TELEGRAM_BOT_TOKEN") || process.env.TELEGRAM_BOT_TOKEN || "",
       chatId: map.get("TELEGRAM_CHAT_ID") || process.env.TELEGRAM_CHAT_ID || "",
+      geminiApiKey: map.get("GEMINI_API_KEY") || process.env.GEMINI_API_KEY || "",
       enabled: map.has("TELEGRAM_ENABLED") ? map.get("TELEGRAM_ENABLED") === "true" : true,
       notifyNewLoan: map.has("TELEGRAM_NOTIFY_NEW_LOAN") ? map.get("TELEGRAM_NOTIFY_NEW_LOAN") === "true" : true,
       notifyPayment: map.has("TELEGRAM_NOTIFY_PAYMENT") ? map.get("TELEGRAM_NOTIFY_PAYMENT") === "true" : true,
@@ -172,6 +175,7 @@ export async function getTelegramSettings(): Promise<TelegramSettingsData> {
     return {
       botToken: process.env.TELEGRAM_BOT_TOKEN || "",
       chatId: process.env.TELEGRAM_CHAT_ID || "",
+      geminiApiKey: process.env.GEMINI_API_KEY || "",
       enabled: true,
       notifyNewLoan: true,
       notifyPayment: true,
@@ -197,6 +201,10 @@ export async function saveTelegramSettings(data: TelegramSettingsData) {
       { key: "TELEGRAM_NOTIFY_REFINANCE", value: String(data.notifyRefinance) },
       { key: "TELEGRAM_NOTIFY_OVERDUE", value: String(data.notifyOverdue) }
     ]
+
+    if (data.geminiApiKey !== undefined && data.geminiApiKey.trim() !== "") {
+      updates.push({ key: "GEMINI_API_KEY", value: data.geminiApiKey.trim() })
+    }
 
     for (const item of updates) {
       await prisma.setting.upsert({
@@ -227,10 +235,19 @@ export async function testTelegramConnection(botToken?: string, chatId?: string)
       return { success: false, error: "Debes ingresar el Chat ID del Grupo de Telegram" }
     }
 
-    const testMessage = `🤖 <b>Prueba de Conexión Exitosa</b>\n\n` +
-      `✅ El sistema <b>JyJ Préstamos</b> se ha conectado correctamente a este grupo de colaboradores.\n\n` +
-      `📅 <b>Fecha y Hora:</b> ${new Date().toLocaleString('es-CO')}\n` +
-      `🔔 A partir de ahora recibirás alertas automáticas de préstamos, pagos, vencimientos y refinanciaciones.`
+    const testMessage =
+      `🤖 <b>¡Hola equipo! Soy Rodolfo, su asistente de JyJ Préstamos</b>\n` +
+      `────────────────────\n` +
+      `✅ <b>Conexión verificada en tiempo real.</b>\n\n` +
+      `💬 <b>¿Cómo consultarme por mensaje o por nota de voz?</b>\n` +
+      `Solo inicia tu mensaje o tu audio diciendo mi nombre (<b>"Rodolfo..."</b>):\n\n` +
+      `• <i>"Rodolfo, ¿cuánto debe la cliente Kelly?"</i>\n` +
+      `• <i>"Rodolfo, ¿quiénes deben pagar hoy?"</i>\n` +
+      `• <i>"Rodolfo, ¿quién está en mora?"</i>\n` +
+      `• <i>"Rodolfo, ¿cuáles fueron los últimos préstamos que se pagaron?"</i>\n` +
+      `• <i>"Rodolfo, pásame las llaves de los inversionistas"</i>\n\n` +
+      `🎙️ <b>También escucho notas de voz:</b> envía un audio empezando con <i>"Rodolfo..."</i> y te responderé al instante.\n\n` +
+      `📅 <i>Conectado el ${new Date().toLocaleString("es-CO", { timeZone: "America/Bogota" })}</i>`
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`
     const res = await fetch(url, {
@@ -252,9 +269,78 @@ export async function testTelegramConnection(botToken?: string, chatId?: string)
       }
     }
 
-    return { success: true, message: "¡Mensaje de prueba enviado exitosamente al grupo!" }
+    return { success: true, message: "¡Mensaje de presentación de Rodolfo enviado al grupo!" }
   } catch (error: any) {
     return { success: false, error: error.message || "Error de red al conectar con Telegram" }
+  }
+}
+
+export async function activateRodolfoWebhook(originUrl: string, botToken?: string, chatId?: string) {
+  try {
+    const current = await getTelegramSettings()
+    const token = (botToken || current.botToken).trim()
+    const chat = (chatId || current.chatId).trim()
+
+    if (!token) {
+      return { success: false, error: "Ingresa el Bot Token primero" }
+    }
+
+    const cleanOrigin = originUrl.replace(/\/$/, "")
+    const webhookUrl = `${cleanOrigin}/api/telegram/webhook`
+
+    // 1. Configurar Webhook en Telegram
+    const whRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: webhookUrl,
+        allowed_updates: ["message", "edited_message", "my_chat_member"]
+      })
+    })
+    const whData = await whRes.json()
+    if (!whRes.ok || !whData.ok) {
+      return { success: false, error: whData.description || "No se pudo registrar el Webhook en Telegram" }
+    }
+
+    // 2. Registrar menú de comandos rápidos en Telegram
+    await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        commands: [
+          { command: "resumen", description: "📊 Resumen ejecutivo de cartera hoy" },
+          { command: "hoy", description: "📅 ¿Quiénes deben pagar hoy?" },
+          { command: "mora", description: "🚨 Clientes y cuotas en mora" },
+          { command: "pagos", description: "💵 Últimos pagos y préstamos liquidados" },
+          { command: "inversionistas", description: "🔑 Inversionistas y llaves de transferencia" },
+          { command: "ayuda", description: "🤖 ¿Cómo hablar o enviar audios a Rodolfo?" }
+        ]
+      })
+    }).catch(() => {})
+
+    // 3. Verificar permisos de lectura en grupo
+    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`).then(r => r.json()).catch(() => null)
+    const botId = meRes?.result?.id
+    const canReadAll = Boolean(meRes?.result?.can_read_all_group_messages)
+    let isGroupAdmin = false
+
+    if (botId && chat) {
+      const memberRes = await fetch(
+        `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(chat)}&user_id=${botId}`
+      ).then(r => r.json()).catch(() => null)
+      const status = memberRes?.result?.status
+      isGroupAdmin = status === "administrator" || status === "creator"
+    }
+
+    return {
+      success: true,
+      webhookUrl,
+      canListenAllMessages: canReadAll || isGroupAdmin,
+      isGroupAdmin,
+      canReadAll
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message || "Error al activar el Webhook de Rodolfo" }
   }
 }
 

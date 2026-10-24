@@ -8,7 +8,6 @@ export async function sendTelegramMessage(htmlText: string): Promise<boolean> {
     const settings = await getTelegramSettings()
     
     if (!settings.enabled || !settings.botToken || !settings.chatId) {
-      // Notificaciones deshabilitadas o sin configurar
       return false
     }
 
@@ -40,6 +39,11 @@ const formatMoney = (cents: number) => {
   return `$${(cents / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}`
 }
 
+const nowCol = () =>
+  new Date().toLocaleString("es-CO", { timeZone: "America/Bogota" })
+
+const RODOLFO_FOOTER = `\n────────────────────\n🤖 <i>Rodolfo • JyJ Préstamos</i>`
+
 /**
  * 🚀 Notificación de Nuevo Préstamo Creado
  */
@@ -63,15 +67,18 @@ export async function notifyLoanCreated(data: {
   }
   const periodicity = periodicityMap[data.interestType] || data.interestType
 
-  const message = `🚀 <b>NUEVO PRÉSTAMO REGISTRADO</b>\n\n` +
-    `👤 <b>Cliente:</b> ${data.clientName} (CC: ${data.idDocument})\n` +
-    `💰 <b>Monto Prestado:</b> ${formatMoney(data.principalAmount)}\n` +
-    `📅 <b>Modalidad:</b> ${periodicity} (${data.numberOfInstallments} cuotas)\n` +
-    `💵 <b>Valor Cuota:</b> ${formatMoney(data.installmentAmount)}\n` +
-    `🤝 <b>Fondeo:</b> ${data.investorsSummary || "Fondeo Propio"}\n` +
+  const message =
+    `🚀 <b>NUEVO PRÉSTAMO DESEMBOLSADO</b>\n` +
+    `────────────────────\n` +
+    `👤 <b>Cliente:</b> ${data.clientName} (CC: <code>${data.idDocument}</code>)\n` +
+    `💰 <b>Capital Prestado:</b> <code>${formatMoney(data.principalAmount)}</code>\n` +
+    `📅 <b>Plan de Pago:</b> ${data.numberOfInstallments} cuotas (${periodicity})\n` +
+    `💵 <b>Valor Cuota:</b> <code>${formatMoney(data.installmentAmount)}</code>\n` +
+    `🤝 <b>Fondeo:</b> ${data.investorsSummary || "Capital Propio JyJ"}\n` +
     (data.performedBy ? `✍️ <b>Registrado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID:</b> <code>${data.loanId}</code>\n\n` +
-    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+    `🆔 <b>Ref:</b> <code>#${data.loanId.slice(-6).toUpperCase()}</code>\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -98,15 +105,17 @@ export async function notifyLoanRefinanced(data: {
   }
   const periodicity = periodicityMap[data.interestType] || data.interestType
 
-  const message = `🔄 <b>PRÉSTAMO REFINANCIADO</b>\n\n` +
+  const message =
+    `🔄 <b>PRÉSTAMO REFINANCIADO</b>\n` +
+    `────────────────────\n` +
     `👤 <b>Cliente:</b> ${data.clientName}\n` +
-    `📊 <b>Saldo Insoluto Anterior:</b> ${formatMoney(data.oldOutstandingPrincipal)}\n` +
-    `💰 <b>Nuevo Capital Total:</b> ${formatMoney(data.newPrincipal)}\n` +
-    `📅 <b>Nuevo Plan:</b> ${data.numberOfInstallments} cuotas ${periodicity} de ${formatMoney(data.installmentAmount)}\n` +
-    (data.performedBy ? `🔄 <b>Refinanciado por:</b> ${data.performedBy}\n` : "") +
-    `🔗 <b>Préstamo Anterior:</b> <code>${data.oldLoanId}</code>\n` +
-    `✨ <b>Nuevo Préstamo:</b> <code>${data.newLoanId}</code>\n\n` +
-    `⏱️ <i>Refinanciado el ${new Date().toLocaleString("es-CO")}</i>`
+    `📊 <b>Saldo Anterior:</b> <code>${formatMoney(data.oldOutstandingPrincipal)}</code>\n` +
+    `💰 <b>Nuevo Capital Total:</b> <code>${formatMoney(data.newPrincipal)}</code>\n` +
+    `📅 <b>Nuevo Plan:</b> ${data.numberOfInstallments} cuotas ${periodicity} de <code>${formatMoney(data.installmentAmount)}</code>\n` +
+    (data.performedBy ? `✍️ <b>Refinanciado por:</b> ${data.performedBy}\n` : "") +
+    `✨ <b>Nueva Ref:</b> <code>#${data.newLoanId.slice(-6).toUpperCase()}</code>\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -125,19 +134,22 @@ export async function notifyPaymentReceived(data: {
   isFullyPaid: boolean
   performedBy?: string
 }) {
-  let statusText = data.isFullyPaid 
+  const statusText = data.isFullyPaid 
     ? `🎉 <b>¡PRÉSTAMO TOTALMENTE PAGADO Y LIQUIDADO!</b>` 
-    : `✅ <b>Cuota ${data.installmentNumber} de ${data.totalInstallments} Cancelada</b>`
+    : `✅ <b>Cuota ${data.installmentNumber} de ${data.totalInstallments} Pagada</b>`
 
-  const message = `💵 <b>PAGO DE CUOTA RECIBIDO</b>\n\n` +
+  const message =
+    `💵 <b>RECAUDO DE CUOTA</b>\n` +
+    `────────────────────\n` +
     `👤 <b>Cliente:</b> ${data.clientName}\n` +
-    `💸 <b>Monto Recibido:</b> ${formatMoney(data.amountPaid)}\n` +
-    (data.lateFee > 0 ? `⚠️ <b>Mora Cobrada:</b> ${formatMoney(data.lateFee)}\n` : "") +
-    `📌 <b>Estado:</b> ${statusText}\n` +
-    `📉 <b>Saldo Restante Estimado:</b> ${formatMoney(data.remainingLoanBalance)}\n` +
+    `💸 <b>Monto Recibido:</b> <code>${formatMoney(data.amountPaid)}</code>\n` +
+    (data.lateFee > 0 ? `⚠️ <b>Mora Incluida:</b> <code>${formatMoney(data.lateFee)}</code>\n` : "") +
+    `📌 <b>Progreso:</b> ${statusText}\n` +
+    `📉 <b>Saldo Restante:</b> <code>${formatMoney(data.remainingLoanBalance)}</code>\n` +
     (data.performedBy ? `👤 <b>Cobrado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>Préstamo:</b> <code>${data.loanId}</code>\n\n` +
-    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+    `🆔 <b>Ref:</b> <code>#${data.loanId.slice(-6).toUpperCase()}</code>\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -151,15 +163,18 @@ export async function notifyBatchPayments(data: {
   clients: string[]
   performedBy?: string
 }) {
-  const clientList = data.clients.slice(0, 5).map(c => `• ${c}`).join("\n")
-  const moreText = data.clients.length > 5 ? `\n• ... y ${data.clients.length - 5} más` : ""
+  const clientList = data.clients.slice(0, 6).map(c => `• ${c}`).join("\n")
+  const moreText = data.clients.length > 6 ? `\n• ... y ${data.clients.length - 6} más` : ""
 
-  const message = `📦 <b>RECAUDO MASIVO PROCESADO</b>\n\n` +
+  const message =
+    `📦 <b>RECAUDO MASIVO PROCESADO</b>\n` +
+    `────────────────────\n` +
     `📋 <b>Cuotas Cobradas:</b> ${data.processedCount} cuotas\n` +
-    `💰 <b>Total Recaudado:</b> ${formatMoney(data.totalAmount)}\n` +
-    (data.performedBy ? `👤 <b>Operado / Cobrado por:</b> ${data.performedBy}\n` : "") +
-    `👥 <b>Clientes:\n</b>${clientList}${moreText}\n\n` +
-    `⏱️ <i>Procesado el ${new Date().toLocaleString("es-CO")}</i>`
+    `💰 <b>Total Recaudado:</b> <code>${formatMoney(data.totalAmount)}</code>\n` +
+    (data.performedBy ? `👤 <b>Procesado por:</b> ${data.performedBy}\n` : "") +
+    `👥 <b>Clientes:\n</b>${clientList}${moreText}\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -175,14 +190,17 @@ export async function notifyPrincipalPayment(data: {
   isFullyPaid: boolean
   performedBy?: string
 }) {
-  const message = `🏦 <b>ABONO DIRECTO A CAPITAL</b>\n\n` +
+  const message =
+    `🏦 <b>ABONO DIRECTO A CAPITAL</b>\n` +
+    `────────────────────\n` +
     `👤 <b>Cliente:</b> ${data.clientName}\n` +
-    `💰 <b>Abono a Capital:</b> ${formatMoney(data.amountPaid)}\n` +
-    `📉 <b>Capital Insoluto Restante:</b> ${formatMoney(data.remainingPrincipal)}\n` +
-    (data.performedBy ? `👤 <b>Cobrado / Registrado por:</b> ${data.performedBy}\n` : "") +
+    `💰 <b>Abono Recibido:</b> <code>${formatMoney(data.amountPaid)}</code>\n` +
+    `📉 <b>Capital Pendiente:</b> <code>${formatMoney(data.remainingPrincipal)}</code>\n` +
+    (data.performedBy ? `👤 <b>Registrado por:</b> ${data.performedBy}\n` : "") +
     (data.isFullyPaid ? `🎉 <b>¡PRÉSTAMO LIQUIDADO AL 100%!</b>\n` : "") +
-    `🆔 <b>Préstamo:</b> <code>${data.loanId}</code>\n\n` +
-    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+    `🆔 <b>Ref:</b> <code>#${data.loanId.slice(-6).toUpperCase()}</code>\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -196,12 +214,15 @@ export async function notifyLoanDefaulted(data: {
   principalAmount: number
   performedBy?: string
 }) {
-  const message = `🚨 <b>ALERTA: PRÉSTAMO DECLARADO EN PÉRDIDA</b>\n\n` +
+  const message =
+    `🚨 <b>ALERTA: PRÉSTAMO DECLARADO EN PÉRDIDA</b>\n` +
+    `────────────────────\n` +
     `👤 <b>Cliente:</b> ${data.clientName}\n` +
-    `💥 <b>Capital Original:</b> ${formatMoney(data.principalAmount)}\n` +
+    `💥 <b>Capital Original:</b> <code>${formatMoney(data.principalAmount)}</code>\n` +
     (data.performedBy ? `⚠️ <b>Marcado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID Préstamo:</b> <code>${data.loanId}</code>\n\n` +
-    `⚠️ <i>Marcado como cartera en pérdida el ${new Date().toLocaleString("es-CO")}</i>`
+    `🆔 <b>Ref:</b> <code>#${data.loanId.slice(-6).toUpperCase()}</code>\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -214,11 +235,14 @@ export async function notifyLoanRevived(data: {
   clientName: string
   performedBy?: string
 }) {
-  const message = `✨ <b>PRÉSTAMO REACTIVADO</b>\n\n` +
+  const message =
+    `✨ <b>PRÉSTAMO REACTIVADO</b>\n` +
+    `────────────────────\n` +
     `👤 <b>Cliente:</b> ${data.clientName}\n` +
     (data.performedBy ? `👤 <b>Reactivado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID Préstamo:</b> <code>${data.loanId}</code>\n\n` +
-    `⏱️ <i>Reactivado el ${new Date().toLocaleString("es-CO")}</i>`
+    `🆔 <b>Ref:</b> <code>#${data.loanId.slice(-6).toUpperCase()}</code>\n` +
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -230,32 +254,34 @@ export async function notifyDailySummary(data: {
   dueToday: Array<{ clientName: string, amount: number, installmentNumber: number }>
   overdue: Array<{ clientName: string, amount: number, daysOverdue: number }>
 }) {
-  let message = `☀️ <b>RESUMEN DIARIO DE COBROS Y MORAS</b>\n` +
-    `📅 <b>Fecha:</b> ${new Date().toLocaleDateString("es-CO", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n`
+  let message =
+    `☀️ <b>BUENOS DÍAS EQUIPO • RESUMEN DE HOY</b>\n` +
+    `📅 <b>Fecha:</b> ${new Date().toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n` +
+    `────────────────────\n\n`
 
   if (data.dueToday.length > 0) {
     const totalToday = data.dueToday.reduce((sum, item) => sum + item.amount, 0)
-    message += `🟢 <b>Cobros para HOY (${data.dueToday.length} - ${formatMoney(totalToday)}):</b>\n`
+    message += `🟢 <b>Cobros para HOY (${data.dueToday.length} • ${formatMoney(totalToday)}):</b>\n`
     data.dueToday.forEach((item, idx) => {
-      message += `${idx + 1}. <b>${item.clientName}</b>: ${formatMoney(item.amount)} (Cuota ${item.installmentNumber})\n`
+      message += `${idx + 1}. <b>${item.clientName}</b>: <code>${formatMoney(item.amount)}</code> (Cuota #${item.installmentNumber})\n`
     })
     message += `\n`
   } else {
-    message += `🟢 <i>No hay vencimientos de cuotas programados para hoy.</i>\n\n`
+    message += `🟢 <i>No hay vencimientos programados para el día de hoy.</i>\n\n`
   }
 
   if (data.overdue.length > 0) {
     const totalOverdue = data.overdue.reduce((sum, item) => sum + item.amount, 0)
-    message += `🔴 <b>Cobros en MORA (${data.overdue.length} - ${formatMoney(totalOverdue)}):</b>\n`
+    message += `🔴 <b>Clientes en MORA (${data.overdue.length} • ${formatMoney(totalOverdue)}):</b>\n`
     data.overdue.forEach((item, idx) => {
-      message += `${idx + 1}. <b>${item.clientName}</b>: ${formatMoney(item.amount)} (Retraso: ${item.daysOverdue} días)\n`
+      message += `${idx + 1}. <b>${item.clientName}</b>: <code>${formatMoney(item.amount)}</code> (<i>${item.daysOverdue} días de atraso</i>)\n`
     })
     message += `\n`
   } else {
-    message += `✨ <i>¡Excelente! No hay cuotas vencidas pendientes.</i>\n\n`
+    message += `✨ <i>¡Excelente! No hay cuotas vencidas pendientes hoy.</i>\n\n`
   }
 
-  message += `📊 <i>JyJ Préstamos - Sistema Automático</i>`
+  message += `💬 <i>Recuerda que puedes escribirme o enviarme un audio diciendo "Rodolfo..." para cualquier consulta.</i>` + RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -270,13 +296,15 @@ export async function notifyClientCreated(data: {
   phone: string
   performedBy?: string
 }) {
-  const message = `👤 <b>NUEVO CLIENTE REGISTRADO</b>\n\n` +
+  const message =
+    `👤 <b>NUEVO CLIENTE REGISTRADO</b>\n` +
+    `────────────────────\n` +
     `👤 <b>Nombre:</b> ${data.clientName}\n` +
-    `📄 <b>Documento CC:</b> <code>${data.idDocument}</code>\n` +
+    `📄 <b>Cédula:</b> <code>${data.idDocument}</code>\n` +
     `📱 <b>Teléfono:</b> ${data.phone}\n` +
     (data.performedBy ? `✍️ <b>Registrado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID Cliente:</b> <code>${data.clientId}</code>\n\n` +
-    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -290,12 +318,13 @@ export async function notifyClientDeleted(data: {
   idDocument: string
   performedBy?: string
 }) {
-  const message = `🗑️ <b>CLIENTE ELIMINADO del sistema</b>\n\n` +
-    `👤 <b>Nombre:</b> ${data.clientName}\n` +
-    `📄 <b>Documento CC:</b> <code>${data.idDocument}</code>\n` +
+  const message =
+    `🗑️ <b>CLIENTE ELIMINADO</b>\n` +
+    `────────────────────\n` +
+    `👤 <b>Nombre:</b> ${data.clientName} (CC: <code>${data.idDocument}</code>)\n` +
     (data.performedBy ? `❌ <b>Eliminado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID Cliente:</b> <code>${data.clientId}</code>\n\n` +
-    `⏱️ <i>Eliminado el ${new Date().toLocaleString("es-CO")}</i>`
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -310,13 +339,15 @@ export async function notifyInvestorCreated(data: {
   email?: string
   performedBy?: string
 }) {
-  const message = `👥 <b>NUEVO INVERSIONISTA REGISTRADO</b>\n\n` +
+  const message =
+    `👥 <b>NUEVO INVERSIONISTA REGISTRADO</b>\n` +
+    `────────────────────\n` +
     `👤 <b>Inversionista:</b> ${data.investorName}\n` +
     (data.phone ? `📱 <b>Teléfono:</b> ${data.phone}\n` : "") +
     (data.email ? `📧 <b>Email:</b> ${data.email}\n` : "") +
     (data.performedBy ? `✍️ <b>Registrado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID Inversionista:</b> <code>${data.investorId}</code>\n\n` +
-    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -329,11 +360,13 @@ export async function notifyInvestorDeleted(data: {
   investorName: string
   performedBy?: string
 }) {
-  const message = `🗑️ <b>INVERSIONISTA ELIMINADO del sistema</b>\n\n` +
+  const message =
+    `🗑️ <b>INVERSIONISTA ELIMINADO</b>\n` +
+    `────────────────────\n` +
     `👤 <b>Inversionista:</b> ${data.investorName}\n` +
     (data.performedBy ? `❌ <b>Eliminado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID Inversionista:</b> <code>${data.investorId}</code>\n\n` +
-    `⏱️ <i>Eliminado el ${new Date().toLocaleString("es-CO")}</i>`
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -356,13 +389,15 @@ export async function notifyExpenseCreated(data: {
   }
   const category = categoryMap[data.category] || data.category
 
-  const message = `💸 <b>NUEVO GASTO / EGRESO REGISTRADO</b>\n\n` +
+  const message =
+    `💸 <b>NUEVO GASTO REGISTRADO</b>\n` +
+    `────────────────────\n` +
     `📝 <b>Concepto:</b> ${data.description}\n` +
-    `💰 <b>Monto Gasto:</b> ${formatMoney(data.amount)}\n` +
+    `💰 <b>Monto:</b> <code>${formatMoney(data.amount)}</code>\n` +
     `📁 <b>Categoría:</b> ${category}\n` +
     (data.performedBy ? `✍️ <b>Registrado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID Gasto:</b> <code>${data.expenseId}</code>\n\n` +
-    `⏱️ <i>Registrado el ${new Date().toLocaleString("es-CO")}</i>`
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
@@ -376,12 +411,14 @@ export async function notifyExpenseDeleted(data: {
   amount: number
   performedBy?: string
 }) {
-  const message = `🗑️ <b>GASTO / EGRESO ELIMINADO</b>\n\n` +
+  const message =
+    `🗑️ <b>GASTO ELIMINADO</b>\n` +
+    `────────────────────\n` +
     `📝 <b>Concepto:</b> ${data.description}\n` +
-    `💰 <b>Monto Gasto:</b> ${formatMoney(data.amount)}\n` +
+    `💰 <b>Monto:</b> <code>${formatMoney(data.amount)}</code>\n` +
     (data.performedBy ? `❌ <b>Eliminado por:</b> ${data.performedBy}\n` : "") +
-    `🆔 <b>ID Gasto:</b> <code>${data.expenseId}</code>\n\n` +
-    `⏱️ <i>Eliminado el ${new Date().toLocaleString("es-CO")}</i>`
+    `⏱️ <i>${nowCol()}</i>` +
+    RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }
