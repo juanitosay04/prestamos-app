@@ -991,7 +991,10 @@ export async function getInternalSettlementData(loanIds: string[]) {
       where: { id: { in: loanIds } },
       include: {
         client: true,
-        installments: { orderBy: { installmentNumber: "asc" } },
+        installments: {
+          orderBy: { installmentNumber: "asc" },
+          include: { payments: { where: { deletedAt: null } } }
+        },
         investors: { include: { investor: true } }
       }
     })
@@ -1173,7 +1176,10 @@ export async function getBatchInstallmentBreakdown(
       where: { id: { in: loanIds } },
       include: {
         client: true,
-        installments: { orderBy: { installmentNumber: "asc" } },
+        installments: {
+          orderBy: { installmentNumber: "asc" },
+          include: { payments: { where: { deletedAt: null } } }
+        },
         investors: { include: { investor: true } }
       }
     })
@@ -1202,8 +1208,16 @@ export async function getBatchInstallmentBreakdown(
         installment = paidInstallments[paidInstallments.length - 1] // La más reciente
       }
 
-      // Usar la mora REAL registrada en la cuota (la que efectivamente se cobró)
-      const totalInterest = installment.interestPart + (installment.lateFee || 0)
+      // Usar la mora REAL registrada en la cuota o en sus pagos (la que efectivamente se cobró)
+      const paymentsLateFee = ((installment as any).payments || []).reduce((s: number, p: any) => s + (p.lateFeeApplied || 0), 0)
+      const actualLateFee = Math.max(installment.lateFee || 0, paymentsLateFee)
+      const totalInterest = installment.interestPart + actualLateFee
+      // En payInstallment, installment.amountPaid se guarda con tope en expectedAmount (sin sumar lateFee).
+      // Por eso el total efectivamente recaudado en la cuota es base pagada + mora cobrada.
+      const totalCollectedOnInstallment =
+        installment.amountPaid <= installment.expectedAmount
+          ? installment.amountPaid + actualLateFee
+          : installment.amountPaid
 
       // 1. Comisión secretaria
       let secComm = 0
@@ -1343,17 +1357,21 @@ export async function getBatchInstallmentBreakdown(
         idDocument: loan.client.idDocument,
         installmentNumber: installment.installmentNumber,
         totalPaidInstallments: paidInstallments.length,
-        availableInstallments: paidInstallments.map(i => ({
-          number: i.installmentNumber,
-          dueDate: i.dueDate,
-          amountPaid: i.amountPaid,
-          lateFee: i.lateFee || 0
-        })),
+        availableInstallments: paidInstallments.map(i => {
+          const iPayLate = ((i as any).payments || []).reduce((s: number, p: any) => s + (p.lateFeeApplied || 0), 0)
+          const iLate = Math.max(i.lateFee || 0, iPayLate)
+          return {
+            number: i.installmentNumber,
+            dueDate: i.dueDate,
+            amountPaid: i.amountPaid <= i.expectedAmount ? i.amountPaid + iLate : i.amountPaid,
+            lateFee: iLate
+          }
+        }),
         expectedAmount: installment.expectedAmount,
-        amountPaid: installment.amountPaid,
+        amountPaid: totalCollectedOnInstallment,
         principalPart: installment.principalPart,
         interestPart: installment.interestPart,
-        lateFee: installment.lateFee || 0,
+        lateFee: actualLateFee,
         totalInterest,
         secretaryCommission: secComm,
         companyCommission: jyjComm,

@@ -593,20 +593,23 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     if (!data) return
     let text = `📊 *DESGLOSE MASIVO DE RENTABILIDAD Y PAGOS - JYJ*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `Resumen de cobros de las últimas cuotas pagadas para los préstamos seleccionados.\n\n` +
+      `Resumen de cobros de las cuotas pagadas para los préstamos seleccionados.\n\n` +
       `💵 *CONSOLIDADO DE TRANSFERENCIAS:*\n`
     
     data.consolidatedPayouts.forEach((p: any) => {
-      text += `👤 *${p.name}*: $${(p.amount / 100).toLocaleString('es-CO')} netos\n`
+      text += `👤 *${p.name}*${p.transferKey ? ` (Llave: ${p.transferKey})` : ''}: $${(p.amount / 100).toLocaleString('es-CO')} netos\n`
     })
 
     text += `\n━━━━━━━━━━━━━━━━━━━━\n` +
       `📂 *DETALLE POR DEUDOR:*\n`
 
     data.loansBreakdown.forEach((l: any) => {
+      const mora = l.lateFee || 0
       text += `• *${l.clientName}* (Cta #${l.installmentNumber}):\n` +
-        `  - Recaudado: $${(l.amountPaid / 100).toLocaleString('es-CO')}\n` +
+        `  - Recaudado: $${(l.amountPaid / 100).toLocaleString('es-CO')}${mora > 0 ? ' (Incl. Mora)' : ''}\n` +
         `  - Abono Capital: $${(l.principalPart / 100).toLocaleString('es-CO')}\n` +
+        `  - Interés Corriente: $${(l.interestPart / 100).toLocaleString('es-CO')}\n` +
+        (mora > 0 ? `  - Mora Cobrada: $${(mora / 100).toLocaleString('es-CO')}\n` : '') +
         `  - Comisión JyJ: $${(l.companyCommission / 100).toLocaleString('es-CO')}\n`
       if (l.investorsBreakdown.length > 0) {
         text += `  - Distribución Inversionistas:\n`
@@ -656,7 +659,15 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     doc.setFont("helvetica", "bold")
     doc.text("1. CONSOLIDADO DE TRANSFERENCIAS A REALIZAR", 14, 38)
 
+    let totalConsolidatedCap = 0
+    let totalConsolidatedInt = 0
+    let totalConsolidatedAmount = 0
+
     const consolidatedRows = data.consolidatedPayouts.map((p: any, idx: number) => {
+      totalConsolidatedCap += p.capitalTotal || 0
+      totalConsolidatedInt += p.interestTotal || 0
+      totalConsolidatedAmount += p.amount || 0
+
       let concept = ""
       if (p.type === "INVESTOR") concept = "Retorno Capital + Rendimiento"
       else if (p.type === "COMPANY") concept = "Utilidad JyJ (Capital + Comisión)"
@@ -664,7 +675,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
       else if (p.type === "REFERRER") concept = "Comisión Referido (3%)"
       return [
         (idx + 1).toString(),
-        p.transferKey ? `${p.name}\n🔑 ${p.transferKey}` : p.name,
+        p.transferKey ? `${p.name}\nLlave: ${p.transferKey}` : p.name,
         concept,
         p.capitalTotal > 0 ? `$${(p.capitalTotal / 100).toLocaleString('es-CO')}` : "-",
         p.interestTotal > 0 ? `$${(p.interestTotal / 100).toLocaleString('es-CO')}` : "-",
@@ -676,6 +687,17 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
       startY: 42,
       head: [['#', 'Destinatario / Llave', 'Concepto', 'Capital', 'Rentabilidad', 'Total a Transferir']],
       body: consolidatedRows,
+      foot: [[
+        { content: 'TOTAL CONSOLIDADO A DISTRIBUIR', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(totalConsolidatedCap / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [37, 99, 235] } },
+        { content: `$${(totalConsolidatedInt / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] } },
+        { content: `$${(totalConsolidatedAmount / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [147, 51, 234] } }
+      ]],
+      footStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [15, 23, 42],
+        fontSize: 8.5
+      },
       theme: 'grid',
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
       bodyStyles: { fontSize: 8.5, textColor: [51, 65, 85] },
@@ -696,7 +718,18 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     doc.setFont("helvetica", "bold")
     doc.text("2. DESGLOSE DETALLADO POR CRÉDITO Y CUOTA PAGADA", 14, nextY)
 
+    let totalBreakdownPaid = 0
+    let totalBreakdownCap = 0
+    let totalBreakdownInt = 0
+    let totalBreakdownLate = 0
+
     const loanRows = data.loansBreakdown.map((l: any, idx: number) => {
+      const mora = l.lateFee || 0
+      totalBreakdownPaid += l.amountPaid || 0
+      totalBreakdownCap += l.principalPart || 0
+      totalBreakdownInt += l.interestPart || 0
+      totalBreakdownLate += mora
+
       let distStr = "100% JyJ (Capital Propio)"
       if (l.investorsBreakdown.length > 0) {
         distStr = l.investorsBreakdown.map((inv: any) => 
@@ -706,13 +739,32 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
           distStr += `\nJyJ ${l.jyjBreakdown.percentage}%: Cap: $${(l.jyjBreakdown.capital / 100).toLocaleString('es-CO')} | Rent: $${(l.jyjBreakdown.interest / 100).toLocaleString('es-CO')}`
         }
       }
+
+      const amortLines = [
+        `Capital: $${(l.principalPart / 100).toLocaleString('es-CO')}`,
+        `Interés: $${(l.interestPart / 100).toLocaleString('es-CO')}`,
+        `Mora: $${(mora / 100).toLocaleString('es-CO')}`
+      ]
+      if (mora > 0) {
+        amortLines.push(`Int + Mora: $${(l.totalInterest / 100).toLocaleString('es-CO')}`)
+      }
+
+      const deducLines = [
+        `Secr: $${(l.secretaryCommission / 100).toLocaleString('es-CO')}`,
+        `JyJ Com: $${(l.companyCommission / 100).toLocaleString('es-CO')}`
+      ]
+      if (l.referralCommission > 0) {
+        deducLines.push(`Ref 3%: $${(l.referralCommission / 100).toLocaleString('es-CO')}`)
+      }
+      deducLines.push(`Neto: $${(l.netYield / 100).toLocaleString('es-CO')}`)
+
       return [
         (idx + 1).toString(),
         `${l.clientName}\nRef: #${l.loanId.slice(-6).toUpperCase()}`,
         `Cta #${l.installmentNumber}`,
-        `$${(l.amountPaid / 100).toLocaleString('es-CO')}`,
-        `Capital: $${(l.principalPart / 100).toLocaleString('es-CO')}\nInterés: $${(l.interestPart / 100).toLocaleString('es-CO')}`,
-        `Secr: $${(l.secretaryCommission / 100).toLocaleString('es-CO')}\nJyJ Com: $${(l.companyCommission / 100).toLocaleString('es-CO')}\nNeto: $${(l.netYield / 100).toLocaleString('es-CO')}`,
+        `$${(l.amountPaid / 100).toLocaleString('es-CO')}${mora > 0 ? `\n(Incl. Mora)` : ''}`,
+        amortLines.join('\n'),
+        deducLines.join('\n'),
         distStr
       ]
     })
@@ -720,8 +772,18 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
     autoTable(doc, {
       startY: nextY + 4,
-      head: [['#', 'Cliente / Préstamo', 'Cuota', 'Recaudado', 'Amortización', 'Deducciones', 'Distribución']],
+      head: [['#', 'Cliente / Préstamo', 'Cuota', 'Recaudado', 'Amortización y Mora', 'Deducciones', 'Distribución']],
       body: loanRows,
+      foot: [[
+        { content: 'TOTALES RECAUDADOS', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: `$${(totalBreakdownPaid / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [88, 28, 135] } },
+        { content: `Cap: $${(totalBreakdownCap / 100).toLocaleString('es-CO')} | Int: $${(totalBreakdownInt / 100).toLocaleString('es-CO')}${totalBreakdownLate > 0 ? ` | Mora: $${(totalBreakdownLate / 100).toLocaleString('es-CO')}` : ''}`, colSpan: 3, styles: { fontStyle: 'bold' } }
+      ]],
+      footStyles: {
+        fillColor: [243, 232, 255],
+        textColor: [15, 23, 42],
+        fontSize: 7.5
+      },
       theme: 'grid',
       headStyles: { fillColor: [88, 28, 135], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
       bodyStyles: { fontSize: 7.5, textColor: [51, 65, 85] },

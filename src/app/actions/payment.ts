@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { notifyPaymentReceived, notifyBatchPayments } from "@/lib/telegram"
-import { getCurrentUserSummary } from "@/lib/session"
+import { getSession, getCurrentUserSummary } from "@/lib/session"
 
 export async function payInstallment(installmentId: string, lateFeeInCents: number = 0, amountPaidInCents?: number) {
   try {
