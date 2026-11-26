@@ -881,7 +881,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
   }
 
   return (
-    <div className="relative space-y-4">
+    <div className={`relative space-y-4 transition-all ${selectedIds.length > 0 ? "pb-32" : "pb-8"}`}>
       {/* Floating Action Bar */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glass-panel-elevated rounded-2xl px-6 py-4 flex flex-wrap items-center justify-between gap-4 max-w-4xl w-[92%] animate-in slide-in-from-bottom-10 fade-in duration-300">
@@ -1492,7 +1492,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
               ) : (
                 loans.map((loan) => {
                   const isSelected = selectedIds.includes(loan.id)
-                  const isSelectable = loan.status !== "DEFAULTED" && loan.status !== "PAID"
+                  const isSelectable = loan.status !== "DEFAULTED"
                   
                   return (
                     <tr 
