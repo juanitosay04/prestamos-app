@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { notifyPaymentReceived, notifyBatchPayments } from "@/lib/telegram"
 import { getSession, getCurrentUserSummary } from "@/lib/session"
+import { getDaysDiffFromColombiaToday } from "@/lib/dates"
 
 export async function payInstallment(installmentId: string, lateFeeInCents: number = 0, amountPaidInCents?: number) {
   try {
@@ -200,12 +201,17 @@ export async function processBatchInstallments(loanIds: string[]) {
         if (refInv) referredByInvestorName = refInv.name
       }
 
-      const payResult = await payInstallment(installment.id, 0) // Late fee 0 por defecto en batch
+      const diffDays = getDaysDiffFromColombiaToday(installment.dueDate)
+      const daysLate = diffDays < 0 ? Math.abs(diffDays) : 0
+      const autoLateFeeCents = daysLate > 0 && installment.loan.autoLateFee !== false ? daysLate * 2000 * 100 : 0
+      const effectiveLateFee = Math.max(installment.lateFee || 0, autoLateFeeCents)
+
+      const payResult = await payInstallment(installment.id, effectiveLateFee)
       
       if (payResult.error) {
         results.push({ loanId, success: false, error: payResult.error })
       } else {
-        const totalInterest = installment.interestPart + (installment.lateFee || 0)
+        const totalInterest = installment.interestPart + effectiveLateFee
         
         let secCommAmount = 0
         if (installment.loan.secretaryCommissionType === "FIXED_AMOUNT") {
@@ -257,7 +263,7 @@ export async function processBatchInstallments(loanIds: string[]) {
           clientName: `${installment.loan.client.firstName} ${installment.loan.client.lastName}`,
           clientPhone: installment.loan.client.phone,
           idDocument: installment.loan.client.idDocument,
-          amountPaid: installment.expectedAmount,
+          amountPaid: installment.expectedAmount + effectiveLateFee,
           installmentNumber: installment.installmentNumber,
           
           // Breakdown Info
@@ -270,7 +276,7 @@ export async function processBatchInstallments(loanIds: string[]) {
           referralFee,
           principalPart: installment.principalPart,
           interestPart: installment.interestPart,
-          lateFee: installment.lateFee || 0,
+          lateFee: effectiveLateFee,
           totalInterest,
           remainingInterest,
           investorsBreakdown,
@@ -340,7 +346,11 @@ export async function getBatchInstallmentsInfo(loanIds: string[]) {
           if (refInv) referredByInvestorName = refInv.name
         }
 
-        const totalInterest = installment.interestPart + (installment.lateFee || 0)
+        const diffDays = getDaysDiffFromColombiaToday(installment.dueDate)
+        const daysLate = diffDays < 0 ? Math.abs(diffDays) : 0
+        const autoLateFeeCents = daysLate > 0 && installment.loan.autoLateFee !== false ? daysLate * 2000 * 100 : 0
+        const effectiveLateFee = Math.max(installment.lateFee || 0, autoLateFeeCents)
+        const totalInterest = installment.interestPart + effectiveLateFee
         
         let secCommAmount = 0
         if (installment.loan.secretaryCommissionType === "FIXED_AMOUNT") {
@@ -387,7 +397,7 @@ export async function getBatchInstallmentsInfo(loanIds: string[]) {
           clientName: `${installment.loan.client.firstName} ${installment.loan.client.lastName}`,
           clientPhone: installment.loan.client.phone,
           idDocument: installment.loan.client.idDocument,
-          amountPaid: installment.expectedAmount,
+          amountPaid: installment.expectedAmount + effectiveLateFee,
           installmentNumber: installment.installmentNumber,
           
           // Breakdown Info
@@ -400,7 +410,7 @@ export async function getBatchInstallmentsInfo(loanIds: string[]) {
           referralFee,
           principalPart: installment.principalPart,
           interestPart: installment.interestPart,
-          lateFee: installment.lateFee || 0,
+          lateFee: effectiveLateFee,
           totalInterest,
           remainingInterest,
           investorsBreakdown,

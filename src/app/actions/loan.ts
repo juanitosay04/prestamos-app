@@ -7,6 +7,7 @@ import { getSession, getCurrentUserSummary } from "@/lib/session"
 import { generateSecretaryCommissionExpense } from "./payment"
 import { getSecretaryCommissionSettings, getCompanyCommissionSettings } from "./settings"
 import { notifyLoanCreated, notifyLoanRefinanced, notifyLoanDefaulted, notifyPrincipalPayment, notifyLoanRevived, notifyLoanUpdated, notifyPromissoryNoteEvent } from "@/lib/telegram"
+import { getDaysDiffFromColombiaToday } from "@/lib/dates"
 
 export async function getLoans(month?: number, year?: number) {
   try {
@@ -1172,10 +1173,11 @@ export async function getInternalSettlementData(loanIds: string[]) {
 export async function getBatchInstallmentBreakdown(
   loanIds: string[],
   selectedInstallments?: Record<string, number>, // loanId -> installmentNumber
-  mode: "LAST_PAID" | "NEXT_PENDING" = "LAST_PAID",
+  mode: "AUTO" | "LAST_PAID" | "NEXT_PENDING" = "AUTO",
   customLateFees?: Record<string, number> // loanId -> mora personalizada en centavos
 ) {
   try {
+    const now = new Date()
     const loans = await prisma.loan.findMany({
       where: { id: { in: loanIds } },
       include: {
@@ -1195,6 +1197,23 @@ export async function getBatchInstallmentBreakdown(
     const details: any[] = []
     const consolidatedMap: Record<string, { name: string, type: string, amount: number, capitalTotal: number, interestTotal: number, transferKey?: string | null, details: any[] }> = {}
 
+    // Helper para calcular mora real o acumulada por días de atraso ($2.000/día) en cuotas pendientes vencidas
+    const computeInstallmentLateInfo = (inst: any, autoLateFeeEnabled: boolean) => {
+      const paymentsLateFee = ((inst as any).payments || []).reduce((s: number, p: any) => s + (p.lateFeeApplied || 0), 0)
+      const recordedLateFee = Math.max(inst.lateFee || 0, paymentsLateFee)
+      const diffDays = getDaysDiffFromColombiaToday(inst.dueDate, now)
+      const isUnpaidOverdue = inst.status !== "PAID" && diffDays < 0
+      const daysLate = isUnpaidOverdue ? Math.abs(diffDays) : 0
+      const autoMoraCents = isUnpaidOverdue && autoLateFeeEnabled !== false ? daysLate * 2000 * 100 : 0
+      const effectiveLateFee = inst.status !== "PAID" ? Math.max(recordedLateFee, autoMoraCents) : recordedLateFee
+      return {
+        effectiveLateFee,
+        recordedLateFee,
+        daysLate,
+        isUnpaidOverdue
+      }
+    }
+
     for (const loan of loans) {
       if (!loan.installments || loan.installments.length === 0) {
         continue
@@ -1203,8 +1222,10 @@ export async function getBatchInstallmentBreakdown(
       const paidInstallments = loan.installments.filter(i => i.status === "PAID")
       const pendingInstallments = loan.installments.filter(i => i.status !== "PAID")
       const nextPendingInstallment = pendingInstallments[0] || null
+      const nextPendingDiffDays = nextPendingInstallment ? getDaysDiffFromColombiaToday(nextPendingInstallment.dueDate, now) : 0
+      const hasOverduePending = Boolean(nextPendingInstallment && nextPendingDiffDays < 0)
 
-      // Determinar qué cuota mostrar (pagada o próxima a pagar / proyectada)
+      // Determinar qué cuota mostrar
       let installment
       const requestedNum = selectedInstallments?.[loan.id]
       if (requestedNum) {
@@ -1213,25 +1234,32 @@ export async function getBatchInstallmentBreakdown(
       if (!installment) {
         if (mode === "NEXT_PENDING") {
           installment = nextPendingInstallment || paidInstallments[paidInstallments.length - 1] || loan.installments[0]
-        } else {
-          // Modo por defecto: última cuota pagada; si aún no tiene ninguna pagada (ej. préstamo de 1 cuota o primera cuota próxima a pagar), toma la próxima pendiente
+        } else if (mode === "LAST_PAID") {
           installment = paidInstallments[paidInstallments.length - 1] || nextPendingInstallment || loan.installments[0]
+        } else {
+          // Modo AUTO: Si el préstamo tiene una cuota actualmente EN MORA, seleccionamos esa cuota en mora para que se vea su mora actual;
+          // de lo contrario, toma la última pagada (o la próxima pendiente si aún no tiene cuotas pagadas).
+          if (hasOverduePending && nextPendingInstallment) {
+            installment = nextPendingInstallment
+          } else {
+            installment = paidInstallments[paidInstallments.length - 1] || nextPendingInstallment || loan.installments[0]
+          }
         }
       }
 
       const isProjected = installment.status !== "PAID"
+      const { effectiveLateFee, daysLate, isUnpaidOverdue } = computeInstallmentLateInfo(installment, loan.autoLateFee)
 
-      // Usar la mora REAL registrada en la cuota o en sus pagos, o la mora personalizada si se indicó
-      const paymentsLateFee = ((installment as any).payments || []).reduce((s: number, p: any) => s + (p.lateFeeApplied || 0), 0)
-      const recordedLateFee = Math.max(installment.lateFee || 0, paymentsLateFee)
       const actualLateFee =
         customLateFees && customLateFees[loan.id] !== undefined
           ? Math.max(0, customLateFees[loan.id])
-          : recordedLateFee
+          : effectiveLateFee
 
       const totalInterest = installment.interestPart + actualLateFee
-      // Si es una cuota proyectada (aún no pagada), proyectamos el cobro completo de la cuota esperada + mora
-      const baseInstallmentAmount = isProjected ? installment.expectedAmount : installment.amountPaid
+      // Si es una cuota proyectada / en mora (aún no pagada), proyectamos el cobro pendiente de la cuota + mora
+      const baseInstallmentAmount = isProjected
+        ? Math.max(0, installment.expectedAmount - (installment.amountPaid || 0))
+        : installment.amountPaid
       const totalCollectedOnInstallment =
         baseInstallmentAmount <= installment.expectedAmount
           ? baseInstallmentAmount + actualLateFee
@@ -1376,25 +1404,28 @@ export async function getBatchInstallmentBreakdown(
         installmentNumber: installment.installmentNumber,
         installmentStatus: installment.status,
         isProjected,
+        isUnpaidOverdue,
+        daysLate,
         dueDate: installment.dueDate,
         totalInstallmentsCount: loan.installments.length,
         totalPaidInstallments: paidInstallments.length,
         nextPendingInstallmentNumber: nextPendingInstallment ? nextPendingInstallment.installmentNumber : null,
         lastPaidInstallmentNumber: paidInstallments.length > 0 ? paidInstallments[paidInstallments.length - 1].installmentNumber : null,
         availableInstallments: loan.installments.map(i => {
-          const iPayLate = ((i as any).payments || []).reduce((s: number, p: any) => s + (p.lateFeeApplied || 0), 0)
-          const iLate = Math.max(i.lateFee || 0, iPayLate)
+          const iInfo = computeInstallmentLateInfo(i, loan.autoLateFee)
           const iIsProjected = i.status !== "PAID"
-          const iBase = iIsProjected ? i.expectedAmount : i.amountPaid
+          const iBase = iIsProjected ? Math.max(0, i.expectedAmount - (i.amountPaid || 0)) : i.amountPaid
           return {
             number: i.installmentNumber,
             status: i.status,
             isProjected: iIsProjected,
+            isUnpaidOverdue: iInfo.isUnpaidOverdue,
+            daysLate: iInfo.daysLate,
             isNextPending: nextPendingInstallment?.id === i.id,
             dueDate: i.dueDate,
             expectedAmount: i.expectedAmount,
-            amountPaid: iBase <= i.expectedAmount ? iBase + iLate : iBase,
-            lateFee: iLate
+            amountPaid: iBase <= i.expectedAmount ? iBase + iInfo.effectiveLateFee : iBase,
+            lateFee: iInfo.effectiveLateFee
           }
         }),
         expectedAmount: installment.expectedAmount,

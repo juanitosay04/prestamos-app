@@ -27,7 +27,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
   const [breakdownModalOpen, setBreakdownModalOpen] = useState(false)
   const [breakdownData, setBreakdownData] = useState<{ loansBreakdown: any[], consolidatedPayouts: any[] } | null>(null)
   const [breakdownActiveTab, setBreakdownActiveTab] = useState<"consolidated" | "details">("consolidated")
-  const [breakdownMode, setBreakdownMode] = useState<"LAST_PAID" | "NEXT_PENDING">("LAST_PAID")
+  const [breakdownMode, setBreakdownMode] = useState<"AUTO" | "LAST_PAID" | "NEXT_PENDING">("AUTO")
   const [selectedInstallmentNums, setSelectedInstallmentNums] = useState<Record<string, number>>({}) // loanId -> installmentNumber
   const [customLateFees, setCustomLateFees] = useState<Record<string, number>>({}) // loanId -> mora en centavos
   const [reloadingBreakdown, setReloadingBreakdown] = useState(false)
@@ -57,7 +57,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     setTimeout(() => {
       setBreakdownData(null)
       setBreakdownActiveTab("consolidated")
-      setBreakdownMode("LAST_PAID")
+      setBreakdownMode("AUTO")
       setSelectedInstallmentNums({})
       setCustomLateFees({})
     }, 250)
@@ -72,7 +72,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     if (res.data) setBreakdownData(res.data)
   }
 
-  const switchBreakdownMode = async (newMode: "LAST_PAID" | "NEXT_PENDING") => {
+  const switchBreakdownMode = async (newMode: "AUTO" | "LAST_PAID" | "NEXT_PENDING") => {
     setBreakdownMode(newMode)
     setSelectedInstallmentNums({})
     setReloadingBreakdown(true)
@@ -205,8 +205,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
         }
 
         if (res.data && res.data.loansBreakdown.length > 0) {
-          const allProjected = res.data.loansBreakdown.every((l: any) => l.isProjected)
-          setBreakdownMode(allProjected ? "NEXT_PENDING" : "LAST_PAID")
+          setBreakdownMode("AUTO")
           setBreakdownData(res.data)
           setBreakdownModalOpen(true)
         } else {
@@ -791,7 +790,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
       }
       deducLines.push(`Neto: $${(l.netYield / 100).toLocaleString('es-CO')}`)
 
-      const cuotaLabel = `Cta #${l.installmentNumber}\n${l.isProjected ? '(Próxima)' : '(Pagada)'}`
+      const cuotaLabel = `Cta #${l.installmentNumber}\n${l.isUnpaidOverdue ? `(Mora ${l.daysLate}d)` : l.isProjected ? '(Próxima)' : '(Pagada)'}`
       const recaudadoLabel = `$${(l.amountPaid / 100).toLocaleString('es-CO')}${mora > 0 ? `\n(Incl. Mora)` : ''}`
 
       if (hasAnyMora) {
@@ -1117,10 +1116,22 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
               </div>
             </div>
 
-            {/* Barra de Modo: Cuotas Pagadas vs Próxima Cuota a Pagar (Proyección) */}
+            {/* Barra de Modo: Automático (En Mora / Actual) vs Cuotas Pagadas vs Próxima Cuota a Pagar */}
             <div className="flex flex-wrap items-center justify-between gap-2 bg-[#090E1A] px-4 sm:px-6 py-2.5 border-b border-white/[0.08] flex-shrink-0">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] text-slate-400 font-semibold">Visualizar:</span>
+                <button
+                  type="button"
+                  onClick={() => switchBreakdownMode("AUTO")}
+                  disabled={reloadingBreakdown}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
+                    breakdownMode === "AUTO"
+                      ? "bg-orange-500/20 text-orange-300 border-orange-500/40 shadow-sm"
+                      : "bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  🚨 En Mora / Actual
+                </button>
                 <button
                   type="button"
                   onClick={() => switchBreakdownMode("LAST_PAID")}
@@ -1143,7 +1154,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                       : "bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10"
                   }`}
                 >
-                  🔮 Próxima Cuota a Pagar (Proyección)
+                  🔮 Próxima Cuota a Pagar
                 </button>
               </div>
               {reloadingBreakdown && (
@@ -1194,11 +1205,13 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-xs font-bold text-white truncate">{l.clientName}</span>
                             <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
-                              l.isProjected
-                                ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                                : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                              l.isUnpaidOverdue
+                                ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                                : l.isProjected
+                                  ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                                  : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
                             }`}>
-                              {l.isProjected ? "🔮 Próxima / Proyección" : "✅ Pagada"}
+                              {l.isUnpaidOverdue ? `🚨 En Mora (${l.daysLate} días)` : l.isProjected ? "🔮 Próxima / Proyección" : "✅ Pagada"}
                             </span>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -1210,7 +1223,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                             >
                               {(l.availableInstallments || []).map((ai: any) => (
                                 <option key={ai.number} value={ai.number}>
-                                  Cuota #{ai.number} — {ai.status === "PAID" ? "Pagada" : ai.isNextPending ? "Próxima a pagar" : "Pendiente"} (${(ai.expectedAmount / 100).toLocaleString('es-CO')})
+                                  Cuota #{ai.number} — {ai.status === "PAID" ? "Pagada" : ai.isUnpaidOverdue ? `En Mora (${ai.daysLate}d)` : ai.isNextPending ? "Próxima a pagar" : "Pendiente"} (${(ai.expectedAmount / 100).toLocaleString('es-CO')}{ai.lateFee > 0 ? ` + mora $${(ai.lateFee / 100).toLocaleString('es-CO')}` : ''})
                                 </option>
                               ))}
                             </select>
@@ -1317,11 +1330,13 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                         {/* Selector de cuota (pagadas o pendientes / próximas a pagar) */}
                         <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
                           <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
-                            l.isProjected
-                              ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                              : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                            l.isUnpaidOverdue
+                              ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                              : l.isProjected
+                                ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                                : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
                           }`}>
-                            {l.isProjected ? "🔮 Proyección Próxima Cuota" : "✅ Cuota Pagada"}
+                            {l.isUnpaidOverdue ? `🚨 En Mora (${l.daysLate} días)` : l.isProjected ? "🔮 Proyección Próxima Cuota" : "✅ Cuota Pagada"}
                           </span>
                           <select
                             value={selectedInstallmentNums[l.loanId] ?? l.installmentNumber}
@@ -1331,7 +1346,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                           >
                             {(l.availableInstallments || []).map((ai: any) => (
                               <option key={ai.number} value={ai.number}>
-                                Cuota #{ai.number} — {ai.status === "PAID" ? "Pagada" : ai.isNextPending ? "Próxima a pagar" : "Pendiente"}{ai.lateFee > 0 ? ` (+mora $${(ai.lateFee/100).toLocaleString('es-CO')})` : ''}
+                                Cuota #{ai.number} — {ai.status === "PAID" ? "Pagada" : ai.isUnpaidOverdue ? `En Mora (${ai.daysLate}d)` : ai.isNextPending ? "Próxima a pagar" : "Pendiente"}{ai.lateFee > 0 ? ` (+mora $${(ai.lateFee/100).toLocaleString('es-CO')})` : ''}
                               </option>
                             ))}
                           </select>
