@@ -248,40 +248,67 @@ export async function notifyLoanRevived(data: {
 }
 
 /**
- * 📅 Notificación de Resumen Matutino Diario (Cobros de Hoy + Moras)
+ * 📅 Notificación de Resumen Diario / Cierre del Día (Por pagar hoy + Próximos a vencer + Vencidos/En Mora)
  */
 export async function notifyDailySummary(data: {
   dueToday: Array<{ clientName: string, amount: number, installmentNumber: number }>
-  overdue: Array<{ clientName: string, amount: number, daysOverdue: number }>
+  upcoming?: Array<{ clientName: string, amount: number, installmentNumber: number, daysUntil: number }>
+  overdue: Array<{ clientName: string, amount: number, lateFee?: number, daysOverdue: number, installmentNumber?: number }>
+  isClosingReport?: boolean
 }) {
+  const headerTitle = data.isClosingReport
+    ? `🌙 <b>CIERRE DEL DÍA • REPORTE DE COBROS Y VENCIMIENTOS</b>`
+    : `☀️ <b>BUENOS DÍAS EQUIPO • REPORTE DE COBROS Y VENCIMIENTOS</b>`
+
   let message =
-    `☀️ <b>BUENOS DÍAS EQUIPO • RESUMEN DE HOY</b>\n` +
+    `${headerTitle}\n` +
     `📅 <b>Fecha:</b> ${new Date().toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n` +
     `────────────────────\n\n`
 
+  // 1. Los que están por pagar en el día (HOY)
   if (data.dueToday.length > 0) {
     const totalToday = data.dueToday.reduce((sum, item) => sum + item.amount, 0)
-    message += `🟢 <b>Cobros para HOY (${data.dueToday.length} • ${formatMoney(totalToday)}):</b>\n`
+    const todayHeader = data.isClosingReport
+      ? `⏰ <b>Pendientes de HOY al cierre — Ya es hora de pago (${data.dueToday.length} • ${formatMoney(totalToday)}):</b>\n`
+      : `🟢 <b>Por pagar en el día de HOY (${data.dueToday.length} • ${formatMoney(totalToday)}):</b>\n`
+    message += todayHeader
     data.dueToday.forEach((item, idx) => {
       message += `${idx + 1}. <b>${item.clientName}</b>: <code>${formatMoney(item.amount)}</code> (Cuota #${item.installmentNumber})\n`
     })
     message += `\n`
   } else {
-    message += `🟢 <i>No hay vencimientos programados para el día de hoy.</i>\n\n`
+    message += `🟢 <i>No hay cuotas pendientes por pagar del día de hoy.</i>\n\n`
   }
 
-  if (data.overdue.length > 0) {
-    const totalOverdue = data.overdue.reduce((sum, item) => sum + item.amount, 0)
-    message += `🔴 <b>Clientes en MORA (${data.overdue.length} • ${formatMoney(totalOverdue)}):</b>\n`
-    data.overdue.forEach((item, idx) => {
-      message += `${idx + 1}. <b>${item.clientName}</b>: <code>${formatMoney(item.amount)}</code> (<i>${item.daysOverdue} días de atraso</i>)\n`
+  // 2. Los que van a vencer próximamente (próximos 3 días)
+  const upcomingList = data.upcoming || []
+  if (upcomingList.length > 0) {
+    const totalUpcoming = upcomingList.reduce((sum, item) => sum + item.amount, 0)
+    message += `🟡 <b>Próximos a vencer (${upcomingList.length} • ${formatMoney(totalUpcoming)}):</b>\n`
+    upcomingList.forEach((item, idx) => {
+      const whenLabel = item.daysUntil === 1 ? "vence mañana" : `vence en ${item.daysUntil} días`
+      message += `${idx + 1}. <b>${item.clientName}</b>: <code>${formatMoney(item.amount)}</code> (Cuota #${item.installmentNumber} • <i>${whenLabel}</i>)\n`
     })
     message += `\n`
   } else {
-    message += `✨ <i>¡Excelente! No hay cuotas vencidas pendientes hoy.</i>\n\n`
+    message += `🟡 <i>No hay cuotas próximas a vencer en los próximos 3 días.</i>\n\n`
   }
 
-  message += `💬 <i>Recuerda que puedes escribirme o enviarme un audio diciendo "Rodolfo..." para cualquier consulta.</i>` + RODOLFO_FOOTER
+  // 3. Los que ya vencieron / están en mora
+  if (data.overdue.length > 0) {
+    const totalOverdue = data.overdue.reduce((sum, item) => sum + item.amount + (item.lateFee || 0), 0)
+    message += `🔴 <b>Ya vencieron / En MORA (${data.overdue.length} • ${formatMoney(totalOverdue)}):</b>\n`
+    data.overdue.forEach((item, idx) => {
+      const moraText = item.lateFee && item.lateFee > 0 ? ` + mora <code>${formatMoney(item.lateFee)}</code> = <b>${formatMoney(item.amount + item.lateFee)}</b>` : ""
+      const ctaText = item.installmentNumber ? `Cuota #${item.installmentNumber} • ` : ""
+      message += `${idx + 1}. <b>${item.clientName}</b>: <code>${formatMoney(item.amount)}</code>${moraText} (<i>${ctaText}${item.daysOverdue} día(s) de mora</i>)\n`
+    })
+    message += `\n`
+  } else {
+    message += `✨ <i>¡Excelente! No hay clientes con cuotas vencidas hoy.</i>\n\n`
+  }
+
+  message += `💬 <i>Puedes escribirme o enviarme un audio diciendo "Rodolfo..." para consultar cualquier cliente.</i>` + RODOLFO_FOOTER
 
   return sendTelegramMessage(message)
 }

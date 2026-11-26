@@ -2,11 +2,13 @@
 
 import { prisma } from "@/lib/prisma"
 import { getSession } from "@/lib/session"
-import { getDaysDiffFromColombiaToday, getColombiaCurrentHour } from "@/lib/dates"
+import { getDaysDiffFromColombiaToday, getColombiaCurrentHour, getColombiaTodayStr } from "@/lib/dates"
+import { notifyDailySummary } from "@/lib/telegram"
 
 export async function getNotifications() {
   try {
     const now = new Date()
+    const todayStr = getColombiaTodayStr(now)
     const currentColombiaHour = getColombiaCurrentHour(now)
     // El aviso de cobro del día actual solo se activa al momento de cerrar el día (desde las 5:00 PM / 17:00 hora Colombia)
     const isEndOfDayCloseTime = currentColombiaHour >= 17
@@ -33,27 +35,58 @@ export async function getNotifications() {
     })
 
     const notifications: any[] = []
+    const telegramDueToday: Array<{ clientName: string, amount: number, installmentNumber: number }> = []
+    const telegramUpcoming: Array<{ clientName: string, amount: number, installmentNumber: number, daysUntil: number }> = []
+    const telegramOverdue: Array<{ clientName: string, amount: number, lateFee: number, daysOverdue: number, installmentNumber: number }> = []
 
     for (const inst of installments) {
       const diffDays = getDaysDiffFromColombiaToday(inst.dueDate, now)
+      const pendingAmount = Math.max(0, inst.expectedAmount - (inst.amountPaid || 0))
+      const clientFullName = `${inst.loan.client.firstName} ${inst.loan.client.lastName}`
 
-      // No notificar días antes de la fecha de pago
+      // Clasificar para el reporte automático de Rodolfo en Telegram (Por pagar hoy, Próximos a vencer, Vencidos)
+      if (diffDays === 0) {
+        telegramDueToday.push({
+          clientName: clientFullName,
+          amount: pendingAmount,
+          installmentNumber: inst.installmentNumber
+        })
+      } else if (diffDays >= 1 && diffDays <= 3) {
+        telegramUpcoming.push({
+          clientName: clientFullName,
+          amount: pendingAmount,
+          installmentNumber: inst.installmentNumber,
+          daysUntil: diffDays
+        })
+      } else if (diffDays < 0) {
+        const daysLate = Math.abs(diffDays)
+        const autoMora = inst.loan.autoLateFee !== false ? daysLate * 2000 * 100 : 0
+        const lateFee = Math.max(inst.lateFee || 0, autoMora)
+        telegramOverdue.push({
+          clientName: clientFullName,
+          amount: pendingAmount,
+          lateFee,
+          daysOverdue: daysLate,
+          installmentNumber: inst.installmentNumber
+        })
+      }
+
+      // En la campanita web: no notificar días antes de la fecha de pago
       if (diffDays > 0) {
         continue
       }
 
-      // Si vence HOY, solo notificar al momento de cerrar el día (no antes en la mañana/tarde)
+      // Si vence HOY, solo notificar en la campanita al momento de cerrar el día (no antes en la mañana/tarde)
       if (diffDays === 0 && !isEndOfDayCloseTime) {
         continue
       }
 
       const type = diffDays < 0 ? "OVERDUE" : "TODAY"
-      const pendingAmount = Math.max(0, inst.expectedAmount - (inst.amountPaid || 0))
 
       notifications.push({
         id: inst.id,
         loanId: inst.loanId,
-        clientName: `${inst.loan.client.firstName} ${inst.loan.client.lastName}`,
+        clientName: clientFullName,
         installmentNumber: inst.installmentNumber,
         expectedAmount: pendingAmount,
         dueDate: inst.dueDate,
@@ -62,6 +95,29 @@ export async function getNotifications() {
         daysUpcoming: 0,
         isSystem: false
       })
+    }
+
+    // Envío automático de Rodolfo al grupo de Telegram al momento de cerrar el día (1 vez por día desde las 5:00 PM Colombia)
+    if (isEndOfDayCloseTime && (telegramDueToday.length > 0 || telegramUpcoming.length > 0 || telegramOverdue.length > 0)) {
+      try {
+        const settingKey = "LAST_TELEGRAM_CLOSING_REPORT_DATE"
+        const lastReport = await prisma.setting.findUnique({ where: { key: settingKey } })
+        if (!lastReport || lastReport.value !== todayStr) {
+          await prisma.setting.upsert({
+            where: { key: settingKey },
+            create: { key: settingKey, value: todayStr },
+            update: { value: todayStr }
+          })
+          await notifyDailySummary({
+            dueToday: telegramDueToday,
+            upcoming: telegramUpcoming,
+            overdue: telegramOverdue,
+            isClosingReport: true
+          })
+        }
+      } catch (telErr) {
+        console.error("Error sending automatic closing Telegram summary:", telErr)
+      }
     }
 
     const session = await getSession()

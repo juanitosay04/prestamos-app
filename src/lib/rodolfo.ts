@@ -1,17 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { getTelegramSettings } from "@/app/actions/settings"
+import { getDaysDiffFromColombiaToday, formatInstallmentDate } from "@/lib/dates"
 
 const fmt = (cents: number) =>
   `$${Math.round(cents / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}`
 
 const fmtDate = (d: Date | string | null | undefined) => {
   if (!d) return "N/A"
-  return new Date(d).toLocaleDateString("es-CO", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
+  return formatInstallmentDate(d)
 }
 
 const periodicityMap: Record<string, string> = {
@@ -128,41 +124,32 @@ export async function buildRodolfoDatabaseContext(): Promise<string> {
       const pendingOnInst = Math.max(0, inst.expectedAmount - alreadyPaid)
       const interestPending = Math.max(0, inst.interestPart - Math.min(alreadyPaid, inst.interestPart))
       const capitalPending = Math.max(0, pendingOnInst - interestPending)
-      const lateFee = inst.lateFee || 0
+
+      // Comparar fecha de vencimiento con fecha actual en Colombia usando días calendario exactos
+      const diffDays = getDaysDiffFromColombiaToday(inst.dueDate, now)
+      const daysLate = diffDays < 0 ? Math.abs(diffDays) : 0
+      const autoLateFee = daysLate > 0 && loan.autoLateFee !== false ? daysLate * 2000 * 100 : 0
+      const lateFee = Math.max(inst.lateFee || 0, autoLateFee)
 
       pendingCapital += capitalPending
       pendingInterest += interestPending
       pendingLateFees += lateFee
       totalRemainingToPay += pendingOnInst + lateFee
 
-      // Comparar fecha de vencimiento con fecha actual en Colombia
-      const instDueStr = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "America/Bogota",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date(inst.dueDate))
-
       if (loan.status === "ACTIVE" || loan.status === "OVERDUE") {
-        if (instDueStr === bogotaDateParts) {
+        if (diffDays === 0) {
           dueTodayList.push(
-            `- ${clientFullName} (Tel: ${loan.client.phone}): Cuota #${inst.installmentNumber}/${loan.numberOfInstallments} vence HOY (${fmtDate(inst.dueDate)}) por ${fmt(pendingOnInst + lateFee)}`
+            `- ${clientFullName} (Tel: ${loan.client.phone}): Cuota #${inst.installmentNumber}/${loan.numberOfInstallments} vence HOY (${fmtDate(inst.dueDate)}) por ${fmt(pendingOnInst)}`
           )
-        } else if (instDueStr < bogotaDateParts) {
-          const diffMs = now.getTime() - new Date(inst.dueDate).getTime()
-          const daysLate = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+        } else if (diffDays < 0) {
           totalOverdueAmount += pendingOnInst + lateFee
           overdueInstallmentsList.push(
-            `- ${clientFullName} (CC: ${loan.client.idDocument}, Tel: ${loan.client.phone}): Cuota #${inst.installmentNumber}/${loan.numberOfInstallments} venció el ${fmtDate(inst.dueDate)} (${daysLate} días de mora) | Falta de la cuota: ${fmt(pendingOnInst)} | Mora: ${fmt(lateFee)} | Total exigible cuota: ${fmt(pendingOnInst + lateFee)}`
+            `- ${clientFullName} (CC: ${loan.client.idDocument}, Tel: ${loan.client.phone}): Cuota #${inst.installmentNumber}/${loan.numberOfInstallments} venció el ${fmtDate(inst.dueDate)} (${daysLate} días de mora) | Cuota: ${fmt(pendingOnInst)} | Mora acumulada: ${fmt(lateFee)} | Total exigible hoy: ${fmt(pendingOnInst + lateFee)}`
           )
-        } else {
-          const diffMs = new Date(inst.dueDate).getTime() - now.getTime()
-          const daysUntil = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-          if (daysUntil >= 1 && daysUntil <= 7) {
-            upcomingNext7DaysList.push(
-              `- ${clientFullName}: Cuota #${inst.installmentNumber}/${loan.numberOfInstallments} vence el ${fmtDate(inst.dueDate)} (en ${daysUntil} días) por ${fmt(pendingOnInst)}`
-            )
-          }
+        } else if (diffDays >= 1 && diffDays <= 7) {
+          upcomingNext7DaysList.push(
+            `- ${clientFullName} (Tel: ${loan.client.phone}): Cuota #${inst.installmentNumber}/${loan.numberOfInstallments} vence el ${fmtDate(inst.dueDate)} (en ${diffDays} día(s)) por ${fmt(pendingOnInst)}`
+          )
         }
       }
     }

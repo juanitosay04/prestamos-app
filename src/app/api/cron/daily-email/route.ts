@@ -26,31 +26,48 @@ export async function GET(request: Request) {
     })
 
     const dueTodayInstallments = allPending.filter(inst => getDaysDiffFromColombiaToday(inst.dueDate, now) === 0)
+    const upcomingInstallments = allPending.filter(inst => {
+      const d = getDaysDiffFromColombiaToday(inst.dueDate, now)
+      return d >= 1 && d <= 3
+    })
     const overdueInstallments = allPending.filter(inst => getDaysDiffFromColombiaToday(inst.dueDate, now) < 0)
     const today = now
 
-    // Notificación automática a Telegram para colaboradores
+    // Notificación automática a Telegram para colaboradores (Rodolfo)
     try {
       const formattedDueToday = dueTodayInstallments.map(inst => ({
         clientName: `${inst.loan.client.firstName} ${inst.loan.client.lastName}`,
-        amount: inst.expectedAmount - inst.amountPaid,
+        amount: Math.max(0, inst.expectedAmount - (inst.amountPaid || 0)),
         installmentNumber: inst.installmentNumber
+      }))
+
+      const formattedUpcoming = upcomingInstallments.map(inst => ({
+        clientName: `${inst.loan.client.firstName} ${inst.loan.client.lastName}`,
+        amount: Math.max(0, inst.expectedAmount - (inst.amountPaid || 0)),
+        installmentNumber: inst.installmentNumber,
+        daysUntil: getDaysDiffFromColombiaToday(inst.dueDate, now)
       }))
 
       const formattedOverdue = overdueInstallments.map(inst => {
         const daysOverdue = Math.abs(getDaysDiffFromColombiaToday(inst.dueDate, now))
+        const autoMora = inst.loan.autoLateFee !== false ? daysOverdue * 2000 * 100 : 0
+        const lateFee = Math.max(inst.lateFee || 0, autoMora)
         return {
           clientName: `${inst.loan.client.firstName} ${inst.loan.client.lastName}`,
-          amount: inst.expectedAmount - inst.amountPaid,
+          amount: Math.max(0, inst.expectedAmount - (inst.amountPaid || 0)),
+          lateFee,
+          installmentNumber: inst.installmentNumber,
           dueDate: new Date(inst.dueDate),
           daysOverdue
         }
       })
 
-      if (formattedDueToday.length > 0 || formattedOverdue.length > 0) {
+      if (formattedDueToday.length > 0 || formattedUpcoming.length > 0 || formattedOverdue.length > 0) {
         await notifyDailySummary({
           dueToday: formattedDueToday,
-          overdue: formattedOverdue
+          upcoming: formattedUpcoming,
+          overdue: formattedOverdue,
+          isClosingReport: false
         })
       }
     } catch (telErr) {
