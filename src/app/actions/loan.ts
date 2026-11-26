@@ -1169,7 +1169,9 @@ export async function getInternalSettlementData(loanIds: string[]) {
 
 export async function getBatchInstallmentBreakdown(
   loanIds: string[],
-  selectedInstallments?: Record<string, number> // loanId -> installmentNumber (for historical breakdown)
+  selectedInstallments?: Record<string, number>, // loanId -> installmentNumber
+  mode: "LAST_PAID" | "NEXT_PENDING" = "LAST_PAID",
+  customLateFees?: Record<string, number> // loanId -> mora personalizada en centavos
 ) {
   try {
     const loans = await prisma.loan.findMany({
@@ -1192,32 +1194,46 @@ export async function getBatchInstallmentBreakdown(
     const consolidatedMap: Record<string, { name: string, type: string, amount: number, capitalTotal: number, interestTotal: number, transferKey?: string | null, details: any[] }> = {}
 
     for (const loan of loans) {
-      // Buscar cuotas pagadas
-      const paidInstallments = loan.installments.filter(i => i.status === "PAID")
-      if (paidInstallments.length === 0) {
-        continue // No tiene cuotas pagadas aún
+      if (!loan.installments || loan.installments.length === 0) {
+        continue
       }
 
-      // Si se especificó un número de cuota para este préstamo, usarla; si no, la última pagada
+      const paidInstallments = loan.installments.filter(i => i.status === "PAID")
+      const pendingInstallments = loan.installments.filter(i => i.status !== "PAID")
+      const nextPendingInstallment = pendingInstallments[0] || null
+
+      // Determinar qué cuota mostrar (pagada o próxima a pagar / proyectada)
       let installment
       const requestedNum = selectedInstallments?.[loan.id]
       if (requestedNum) {
-        installment = paidInstallments.find(i => i.installmentNumber === requestedNum)
+        installment = loan.installments.find(i => i.installmentNumber === requestedNum)
       }
       if (!installment) {
-        installment = paidInstallments[paidInstallments.length - 1] // La más reciente
+        if (mode === "NEXT_PENDING") {
+          installment = nextPendingInstallment || paidInstallments[paidInstallments.length - 1] || loan.installments[0]
+        } else {
+          // Modo por defecto: última cuota pagada; si aún no tiene ninguna pagada (ej. préstamo de 1 cuota o primera cuota próxima a pagar), toma la próxima pendiente
+          installment = paidInstallments[paidInstallments.length - 1] || nextPendingInstallment || loan.installments[0]
+        }
       }
 
-      // Usar la mora REAL registrada en la cuota o en sus pagos (la que efectivamente se cobró)
+      const isProjected = installment.status !== "PAID"
+
+      // Usar la mora REAL registrada en la cuota o en sus pagos, o la mora personalizada si se indicó
       const paymentsLateFee = ((installment as any).payments || []).reduce((s: number, p: any) => s + (p.lateFeeApplied || 0), 0)
-      const actualLateFee = Math.max(installment.lateFee || 0, paymentsLateFee)
+      const recordedLateFee = Math.max(installment.lateFee || 0, paymentsLateFee)
+      const actualLateFee =
+        customLateFees && customLateFees[loan.id] !== undefined
+          ? Math.max(0, customLateFees[loan.id])
+          : recordedLateFee
+
       const totalInterest = installment.interestPart + actualLateFee
-      // En payInstallment, installment.amountPaid se guarda con tope en expectedAmount (sin sumar lateFee).
-      // Por eso el total efectivamente recaudado en la cuota es base pagada + mora cobrada.
+      // Si es una cuota proyectada (aún no pagada), proyectamos el cobro completo de la cuota esperada + mora
+      const baseInstallmentAmount = isProjected ? installment.expectedAmount : installment.amountPaid
       const totalCollectedOnInstallment =
-        installment.amountPaid <= installment.expectedAmount
-          ? installment.amountPaid + actualLateFee
-          : installment.amountPaid
+        baseInstallmentAmount <= installment.expectedAmount
+          ? baseInstallmentAmount + actualLateFee
+          : baseInstallmentAmount
 
       // 1. Comisión secretaria
       let secComm = 0
@@ -1356,14 +1372,26 @@ export async function getBatchInstallmentBreakdown(
         clientName: `${loan.client.firstName} ${loan.client.lastName}`,
         idDocument: loan.client.idDocument,
         installmentNumber: installment.installmentNumber,
+        installmentStatus: installment.status,
+        isProjected,
+        dueDate: installment.dueDate,
+        totalInstallmentsCount: loan.installments.length,
         totalPaidInstallments: paidInstallments.length,
-        availableInstallments: paidInstallments.map(i => {
+        nextPendingInstallmentNumber: nextPendingInstallment ? nextPendingInstallment.installmentNumber : null,
+        lastPaidInstallmentNumber: paidInstallments.length > 0 ? paidInstallments[paidInstallments.length - 1].installmentNumber : null,
+        availableInstallments: loan.installments.map(i => {
           const iPayLate = ((i as any).payments || []).reduce((s: number, p: any) => s + (p.lateFeeApplied || 0), 0)
           const iLate = Math.max(i.lateFee || 0, iPayLate)
+          const iIsProjected = i.status !== "PAID"
+          const iBase = iIsProjected ? i.expectedAmount : i.amountPaid
           return {
             number: i.installmentNumber,
+            status: i.status,
+            isProjected: iIsProjected,
+            isNextPending: nextPendingInstallment?.id === i.id,
             dueDate: i.dueDate,
-            amountPaid: i.amountPaid <= i.expectedAmount ? i.amountPaid + iLate : i.amountPaid,
+            expectedAmount: i.expectedAmount,
+            amountPaid: iBase <= i.expectedAmount ? iBase + iLate : iBase,
             lateFee: iLate
           }
         }),

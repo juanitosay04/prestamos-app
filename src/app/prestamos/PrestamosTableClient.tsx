@@ -27,7 +27,9 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
   const [breakdownModalOpen, setBreakdownModalOpen] = useState(false)
   const [breakdownData, setBreakdownData] = useState<{ loansBreakdown: any[], consolidatedPayouts: any[] } | null>(null)
   const [breakdownActiveTab, setBreakdownActiveTab] = useState<"consolidated" | "details">("consolidated")
+  const [breakdownMode, setBreakdownMode] = useState<"LAST_PAID" | "NEXT_PENDING">("LAST_PAID")
   const [selectedInstallmentNums, setSelectedInstallmentNums] = useState<Record<string, number>>({}) // loanId -> installmentNumber
+  const [customLateFees, setCustomLateFees] = useState<Record<string, number>>({}) // loanId -> mora en centavos
   const [reloadingBreakdown, setReloadingBreakdown] = useState(false)
 
   const printSingleRef = useRef<HTMLDivElement>(null)
@@ -55,7 +57,9 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     setTimeout(() => {
       setBreakdownData(null)
       setBreakdownActiveTab("consolidated")
+      setBreakdownMode("LAST_PAID")
       setSelectedInstallmentNums({})
+      setCustomLateFees({})
     }, 250)
   }
 
@@ -63,7 +67,26 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
     const newSelection = { ...selectedInstallmentNums, [loanId]: installmentNumber }
     setSelectedInstallmentNums(newSelection)
     setReloadingBreakdown(true)
-    const res = await getBatchInstallmentBreakdown(selectedIds, newSelection)
+    const res = await getBatchInstallmentBreakdown(selectedIds, newSelection, breakdownMode, customLateFees)
+    setReloadingBreakdown(false)
+    if (res.data) setBreakdownData(res.data)
+  }
+
+  const switchBreakdownMode = async (newMode: "LAST_PAID" | "NEXT_PENDING") => {
+    setBreakdownMode(newMode)
+    setSelectedInstallmentNums({})
+    setReloadingBreakdown(true)
+    const res = await getBatchInstallmentBreakdown(selectedIds, {}, newMode, customLateFees)
+    setReloadingBreakdown(false)
+    if (res.data) setBreakdownData(res.data)
+  }
+
+  const updateCustomLateFee = async (loanId: string, moraPesos: number) => {
+    const moraCents = Math.max(0, Math.round((moraPesos || 0) * 100))
+    const newLateFees = { ...customLateFees, [loanId]: moraCents }
+    setCustomLateFees(newLateFees)
+    setReloadingBreakdown(true)
+    const res = await getBatchInstallmentBreakdown(selectedIds, selectedInstallmentNums, breakdownMode, newLateFees)
     setReloadingBreakdown(false)
     if (res.data) setBreakdownData(res.data)
   }
@@ -182,10 +205,12 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
         }
 
         if (res.data && res.data.loansBreakdown.length > 0) {
+          const allProjected = res.data.loansBreakdown.every((l: any) => l.isProjected)
+          setBreakdownMode(allProjected ? "NEXT_PENDING" : "LAST_PAID")
           setBreakdownData(res.data)
           setBreakdownModalOpen(true)
         } else {
-          alert("Ninguno de los préstamos seleccionados tiene cuotas pagadas para desglosar.")
+          alert("No se encontraron cuotas para desglosar en los préstamos seleccionados.")
         }
       } catch (err: any) {
         setLoading(false)
@@ -713,10 +738,19 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
     // Loan breakdown table
     const nextY = (doc as any).lastAutoTable.finalY + 10
+    const hasAnyMora = data.loansBreakdown.some((l: any) => (l.lateFee || 0) > 0)
+    const hasAnyProjected = data.loansBreakdown.some((l: any) => l.isProjected)
+
     doc.setFontSize(10)
     doc.setTextColor(15, 23, 42)
     doc.setFont("helvetica", "bold")
-    doc.text("2. DESGLOSE DETALLADO POR CRÉDITO Y CUOTA PAGADA", 14, nextY)
+    doc.text(
+      hasAnyProjected
+        ? "2. DESGLOSE DETALLADO POR CRÉDITO Y CUOTA (PAGADAS / PROYECTADAS)"
+        : "2. DESGLOSE DETALLADO POR CRÉDITO Y CUOTA PAGADA",
+      14,
+      nextY
+    )
 
     let totalBreakdownPaid = 0
     let totalBreakdownCap = 0
@@ -742,8 +776,7 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
       const amortLines = [
         `Capital: $${(l.principalPart / 100).toLocaleString('es-CO')}`,
-        `Interés: $${(l.interestPart / 100).toLocaleString('es-CO')}`,
-        `Mora: $${(mora / 100).toLocaleString('es-CO')}`
+        `Interés: $${(l.interestPart / 100).toLocaleString('es-CO')}`
       ]
       if (mora > 0) {
         amortLines.push(`Int + Mora: $${(l.totalInterest / 100).toLocaleString('es-CO')}`)
@@ -758,11 +791,27 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
       }
       deducLines.push(`Neto: $${(l.netYield / 100).toLocaleString('es-CO')}`)
 
+      const cuotaLabel = `Cta #${l.installmentNumber}\n${l.isProjected ? '(Próxima)' : '(Pagada)'}`
+      const recaudadoLabel = `$${(l.amountPaid / 100).toLocaleString('es-CO')}${mora > 0 ? `\n(Incl. Mora)` : ''}`
+
+      if (hasAnyMora) {
+        return [
+          (idx + 1).toString(),
+          `${l.clientName}\nRef: #${l.loanId.slice(-6).toUpperCase()}`,
+          cuotaLabel,
+          recaudadoLabel,
+          mora > 0 ? `$${(mora / 100).toLocaleString('es-CO')}` : '$0',
+          amortLines.join('\n'),
+          deducLines.join('\n'),
+          distStr
+        ]
+      }
+
       return [
         (idx + 1).toString(),
         `${l.clientName}\nRef: #${l.loanId.slice(-6).toUpperCase()}`,
-        `Cta #${l.installmentNumber}`,
-        `$${(l.amountPaid / 100).toLocaleString('es-CO')}${mora > 0 ? `\n(Incl. Mora)` : ''}`,
+        cuotaLabel,
+        recaudadoLabel,
         amortLines.join('\n'),
         deducLines.join('\n'),
         distStr
@@ -772,13 +821,22 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
 
     autoTable(doc, {
       startY: nextY + 4,
-      head: [['#', 'Cliente / Préstamo', 'Cuota', 'Recaudado', 'Amortización y Mora', 'Deducciones', 'Distribución']],
+      head: hasAnyMora
+        ? [['#', 'Cliente / Préstamo', 'Cuota', 'Recaudado', 'Mora', 'Amortización', 'Deducciones', 'Distribución']]
+        : [['#', 'Cliente / Préstamo', 'Cuota', 'Recaudado', 'Amortización', 'Deducciones', 'Distribución']],
       body: loanRows,
-      foot: [[
-        { content: 'TOTALES RECAUDADOS', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
-        { content: `$${(totalBreakdownPaid / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [88, 28, 135] } },
-        { content: `Cap: $${(totalBreakdownCap / 100).toLocaleString('es-CO')} | Int: $${(totalBreakdownInt / 100).toLocaleString('es-CO')}${totalBreakdownLate > 0 ? ` | Mora: $${(totalBreakdownLate / 100).toLocaleString('es-CO')}` : ''}`, colSpan: 3, styles: { fontStyle: 'bold' } }
-      ]],
+      foot: hasAnyMora
+        ? [[
+            { content: 'TOTALES', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: `$${(totalBreakdownPaid / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [88, 28, 135] } },
+            { content: `$${(totalBreakdownLate / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [234, 88, 12] } },
+            { content: `Cap: $${(totalBreakdownCap / 100).toLocaleString('es-CO')} | Int: $${(totalBreakdownInt / 100).toLocaleString('es-CO')}`, colSpan: 3, styles: { fontStyle: 'bold' } }
+          ]]
+        : [[
+            { content: 'TOTALES', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: `$${(totalBreakdownPaid / 100).toLocaleString('es-CO')}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [88, 28, 135] } },
+            { content: `Cap: $${(totalBreakdownCap / 100).toLocaleString('es-CO')} | Int: $${(totalBreakdownInt / 100).toLocaleString('es-CO')}`, colSpan: 3, styles: { fontStyle: 'bold' } }
+          ]],
       footStyles: {
         fillColor: [243, 232, 255],
         textColor: [15, 23, 42],
@@ -788,15 +846,26 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
       headStyles: { fillColor: [88, 28, 135], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
       bodyStyles: { fontSize: 7.5, textColor: [51, 65, 85] },
       alternateRowStyles: { fillColor: [250, 245, 255] },
-      columnStyles: {
-        0: { cellWidth: 8, halign: 'center' },
-        1: { cellWidth: 38 },
-        2: { cellWidth: 15, halign: 'center' },
-        3: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
-        4: { cellWidth: 35 },
-        5: { cellWidth: 30 },
-        6: { cellWidth: 48 }
-      },
+      columnStyles: hasAnyMora
+        ? {
+            0: { cellWidth: 7, halign: 'center' },
+            1: { cellWidth: 33 },
+            2: { cellWidth: 16, halign: 'center' },
+            3: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
+            4: { cellWidth: 17, halign: 'right', fontStyle: 'bold', textColor: [234, 88, 12] },
+            5: { cellWidth: 27 },
+            6: { cellWidth: 25 },
+            7: { cellWidth: 37 }
+          }
+        : {
+            0: { cellWidth: 8, halign: 'center' },
+            1: { cellWidth: 38 },
+            2: { cellWidth: 16, halign: 'center' },
+            3: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
+            4: { cellWidth: 34 },
+            5: { cellWidth: 30 },
+            6: { cellWidth: 48 }
+          },
       didDrawPage: (data) => {
         doc.setFontSize(7)
         doc.setTextColor(148, 163, 184)
@@ -1048,6 +1117,42 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
               </div>
             </div>
 
+            {/* Barra de Modo: Cuotas Pagadas vs Próxima Cuota a Pagar (Proyección) */}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-[#090E1A] px-4 sm:px-6 py-2.5 border-b border-white/[0.08] flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400 font-semibold">Visualizar:</span>
+                <button
+                  type="button"
+                  onClick={() => switchBreakdownMode("LAST_PAID")}
+                  disabled={reloadingBreakdown}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
+                    breakdownMode === "LAST_PAID"
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm"
+                      : "bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  ✅ Última Cuota Pagada
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchBreakdownMode("NEXT_PENDING")}
+                  disabled={reloadingBreakdown}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
+                    breakdownMode === "NEXT_PENDING"
+                      ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm"
+                      : "bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  🔮 Próxima Cuota a Pagar (Proyección)
+                </button>
+              </div>
+              {reloadingBreakdown && (
+                <span className="text-[11px] text-pink-400 flex items-center gap-1.5 font-medium">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Actualizando desglose...
+                </span>
+              )}
+            </div>
+
             {/* Selector de Pestañas */}
             <div className="flex bg-[#0D1424] px-4 sm:px-6 border-b border-white/[0.08] flex-shrink-0">
               <button
@@ -1078,6 +1183,67 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950/40">
               {breakdownActiveTab === "consolidated" ? (
                 <div className="space-y-4">
+                  {/* Selector rápido de cuota y mora por préstamo directamente en Consolidado */}
+                  <div className="bg-slate-900/60 border border-white/[0.08] rounded-xl p-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                      Cuotas seleccionadas para este desglose (Pagadas o Próximas a Pagar)
+                    </h4>
+                    <div className="space-y-2.5">
+                      {breakdownData.loansBreakdown.map((l: any) => (
+                        <div key={l.loanId} className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border border-white/[0.06] rounded-lg px-3 py-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-bold text-white truncate">{l.clientName}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                              l.isProjected
+                                ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                                : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                            }`}>
+                              {l.isProjected ? "🔮 Próxima / Proyección" : "✅ Pagada"}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={selectedInstallmentNums[l.loanId] ?? l.installmentNumber}
+                              onChange={(e) => reloadBreakdownWithSelection(l.loanId, Number(e.target.value))}
+                              disabled={reloadingBreakdown}
+                              className="bg-slate-800 border border-white/15 text-white text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-pink-500 disabled:opacity-50"
+                            >
+                              {(l.availableInstallments || []).map((ai: any) => (
+                                <option key={ai.number} value={ai.number}>
+                                  Cuota #{ai.number} — {ai.status === "PAID" ? "Pagada" : ai.isNextPending ? "Próxima a pagar" : "Pendiente"} (${(ai.expectedAmount / 100).toLocaleString('es-CO')})
+                                </option>
+                              ))}
+                            </select>
+
+                            <div className="flex items-center gap-1 bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1">
+                              <span className="text-[10px] text-orange-400 font-semibold">Mora $:</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={1000}
+                                defaultValue={Math.round((l.lateFee || 0) / 100)}
+                                key={`${l.loanId}-${l.installmentNumber}-${l.lateFee}`}
+                                onBlur={(e) => {
+                                  const val = Number(e.target.value) || 0
+                                  if (val !== Math.round((l.lateFee || 0) / 100)) {
+                                    updateCustomLateFee(l.loanId, val)
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    const val = Number((e.target as HTMLInputElement).value) || 0
+                                    updateCustomLateFee(l.loanId, val)
+                                  }
+                                }}
+                                className="w-20 bg-transparent text-xs text-orange-300 font-mono font-bold focus:outline-none"
+                                title="Ingresa o simula mora en pesos y presiona Enter"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <div className="bg-slate-900/60 border border-white/[0.08] rounded-xl p-4">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
                       Listado de transferencias a realizar
@@ -1148,36 +1314,36 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                             Ref: #{l.loanId.slice(-8).toUpperCase()} • CC: {l.idDocument}
                           </p>
                         </div>
-                        {/* Selector de cuota histórica */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {l.availableInstallments?.length > 1 ? (
-                            <div className="flex flex-col items-end gap-1">
-                              <label className="text-[9px] text-muted-foreground uppercase tracking-wider">Ver cuota:</label>
-                              <select
-                                value={selectedInstallmentNums[l.loanId] ?? l.installmentNumber}
-                                onChange={(e) => reloadBreakdownWithSelection(l.loanId, Number(e.target.value))}
-                                disabled={reloadingBreakdown}
-                                className="bg-slate-800 border border-white/10 text-white text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-pink-500 disabled:opacity-50"
-                              >
-                                {l.availableInstallments.map((ai: any) => (
-                                  <option key={ai.number} value={ai.number}>
-                                    Cuota #{ai.number}{ai.lateFee > 0 ? ` (+mora $${(ai.lateFee/100).toLocaleString('es-CO')})` : ''}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          ) : (
-                            <span className="bg-pink-500/10 text-pink-400 border border-pink-500/20 px-2.5 py-1 rounded-lg text-xs font-semibold font-mono">
-                              Cuota #{l.installmentNumber} Pagada
-                            </span>
-                          )}
+                        {/* Selector de cuota (pagadas o pendientes / próximas a pagar) */}
+                        <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                            l.isProjected
+                              ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                              : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                          }`}>
+                            {l.isProjected ? "🔮 Proyección Próxima Cuota" : "✅ Cuota Pagada"}
+                          </span>
+                          <select
+                            value={selectedInstallmentNums[l.loanId] ?? l.installmentNumber}
+                            onChange={(e) => reloadBreakdownWithSelection(l.loanId, Number(e.target.value))}
+                            disabled={reloadingBreakdown}
+                            className="bg-slate-800 border border-white/10 text-white text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-pink-500 disabled:opacity-50"
+                          >
+                            {(l.availableInstallments || []).map((ai: any) => (
+                              <option key={ai.number} value={ai.number}>
+                                Cuota #{ai.number} — {ai.status === "PAID" ? "Pagada" : ai.isNextPending ? "Próxima a pagar" : "Pendiente"}{ai.lateFee > 0 ? ` (+mora $${(ai.lateFee/100).toLocaleString('es-CO')})` : ''}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </div>
 
                       {/* Caja de recaudo y amortización */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         <div className="bg-white/[0.02] border border-white/[0.05] p-3 rounded-lg">
-                          <span className="text-[10px] text-muted-foreground block uppercase">Recaudado</span>
+                          <span className="text-[10px] text-muted-foreground block uppercase">
+                            {l.isProjected ? "Total a Recaudar" : "Recaudado"}
+                          </span>
                           <span className="text-sm font-bold text-white font-mono">${(l.amountPaid / 100).toLocaleString('es-CO')}</span>
                         </div>
                         <div className="bg-white/[0.02] border border-white/[0.05] p-3 rounded-lg">
@@ -1188,9 +1354,31 @@ export function PrestamosTableClient({ loans, userRole }: { loans: Loan[], userR
                           <span className="text-[10px] text-muted-foreground block uppercase">Interés</span>
                           <span className="text-sm font-bold text-white font-mono">${(l.interestPart / 100).toLocaleString('es-CO')}</span>
                         </div>
-                        <div className="bg-white/[0.02] border border-white/[0.05] p-3 rounded-lg">
-                          <span className="text-[10px] text-muted-foreground block uppercase">Mora Cobrada</span>
-                          <span className="text-sm font-bold text-orange-400 font-mono">${(l.lateFee / 100).toLocaleString('es-CO')}</span>
+                        <div className="bg-white/[0.02] border border-orange-500/20 p-3 rounded-lg">
+                          <span className="text-[10px] text-orange-300/80 block uppercase">Mora (Editable $)</span>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-sm font-bold text-orange-400 font-mono">$</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={1000}
+                              defaultValue={Math.round((l.lateFee || 0) / 100)}
+                              key={`det-${l.loanId}-${l.installmentNumber}-${l.lateFee}`}
+                              onBlur={(e) => {
+                                const val = Number(e.target.value) || 0
+                                if (val !== Math.round((l.lateFee || 0) / 100)) {
+                                  updateCustomLateFee(l.loanId, val)
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const val = Number((e.target as HTMLInputElement).value) || 0
+                                  updateCustomLateFee(l.loanId, val)
+                                }
+                              }}
+                              className="w-full bg-slate-800/80 border border-white/10 rounded px-1.5 py-0.5 text-sm font-bold text-orange-400 font-mono focus:outline-none focus:border-orange-400"
+                            />
+                          </div>
                         </div>
                       </div>
 
