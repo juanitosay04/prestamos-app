@@ -62,10 +62,13 @@ export function NotificationBell() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const handleDismiss = (id: string, e: React.MouseEvent) => {
+  const getDismissKey = (n: NotificationType) => `${n.id}_${n.type}_${n.daysLate}`
+
+  const handleDismiss = (n: NotificationType, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    const updated = [...dismissedIds, id]
+    const key = getDismissKey(n)
+    const updated = [...dismissedIds, key]
     setDismissedIds(updated)
     try {
       localStorage.setItem("dismissed_notifications", JSON.stringify(updated))
@@ -77,8 +80,8 @@ export function NotificationBell() {
   const handleClearAll = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    const allIds = notifications.map(n => n.id)
-    const updated = Array.from(new Set([...dismissedIds, ...allIds]))
+    const allKeys = notifications.map(getDismissKey)
+    const updated = Array.from(new Set([...dismissedIds, ...allKeys]))
     setDismissedIds(updated)
     try {
       localStorage.setItem("dismissed_notifications", JSON.stringify(updated))
@@ -87,8 +90,8 @@ export function NotificationBell() {
     }
   }
 
-  // Filtrar las notificaciones eliminadas localmente
-  const visibleNotifications = notifications.filter(n => !dismissedIds.includes(n.id))
+  // Filtrar las notificaciones eliminadas localmente (si cambia de estado o aumentan los días de mora, vuelve a avisar)
+  const visibleNotifications = notifications.filter(n => !dismissedIds.includes(getDismissKey(n)) && !dismissedIds.includes(n.id))
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -160,14 +163,14 @@ export function NotificationBell() {
                         ) : (
                           <>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              Cuota #{n.installmentNumber} • ${(n.expectedAmount / 100).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })}
+                              Cuota #{n.installmentNumber} • ${(n.expectedAmount / 100).toLocaleString("es-CO", { maximumFractionDigits: 0 })}
                             </p>
                             <p className={`text-xs font-semibold mt-1.5 ${
                               n.type === "OVERDUE" ? "text-destructive" :
                               n.type === "TODAY" ? "text-amber-400" : "text-primary"
                             }`}>
-                              {n.type === "OVERDUE" && `¡Vencida hace ${n.daysLate} día(s)!`}
-                              {n.type === "TODAY" && `Vence el día de HOY`}
+                              {n.type === "OVERDUE" && `¡En mora! Vencida hace ${n.daysLate} día(s)`}
+                              {n.type === "TODAY" && `⏰ Cierre del día: Ya es hora de pago`}
                               {n.type === "UPCOMING" && `Vence en ${n.daysUpcoming} día(s)`}
                             </p>
                           </>
@@ -176,7 +179,7 @@ export function NotificationBell() {
                     </Link>
 
                     <button
-                      onClick={(e) => handleDismiss(n.id, e)}
+                      onClick={(e) => handleDismiss(n, e)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-colors"
                       title="Eliminar notificación"
                     >

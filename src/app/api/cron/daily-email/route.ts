@@ -2,45 +2,32 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import nodemailer from "nodemailer"
 import { notifyDailySummary } from "@/lib/telegram"
+import { getDaysDiffFromColombiaToday } from "@/lib/dates"
 
 // Vercel Cron Job to send daily email and telegram notifications of pending and overdue installments
 export async function GET(request: Request) {
   try {
-    // 1. Fetch pending and overdue installments
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    const endOfToday = new Date(today)
-    endOfToday.setHours(23, 59, 59, 999)
-
-    // Cuotas que vencen hoy
-    const dueTodayInstallments = await prisma.installment.findMany({
+    // 1. Fetch pending and overdue installments of active loans
+    const now = new Date()
+    const allPending = await prisma.installment.findMany({
       where: {
-        status: "PENDING",
-        loan: { status: { not: "REFINANCED" } },
-        dueDate: {
-          gte: today,
-          lte: endOfToday
+        status: { in: ["PENDING", "PARTIAL", "OVERDUE", "LATE"] },
+        loan: {
+          deletedAt: null,
+          status: { in: ["ACTIVE", "OVERDUE"] }
         }
       },
       include: {
         loan: { include: { client: true } }
+      },
+      orderBy: {
+        dueDate: "asc"
       }
     })
 
-    // Cuotas vencidas (antes de hoy)
-    const overdueInstallments = await prisma.installment.findMany({
-      where: {
-        status: "PENDING",
-        loan: { status: { not: "REFINANCED" } },
-        dueDate: {
-          lt: today
-        }
-      },
-      include: {
-        loan: { include: { client: true } }
-      }
-    })
+    const dueTodayInstallments = allPending.filter(inst => getDaysDiffFromColombiaToday(inst.dueDate, now) === 0)
+    const overdueInstallments = allPending.filter(inst => getDaysDiffFromColombiaToday(inst.dueDate, now) < 0)
+    const today = now
 
     // Notificación automática a Telegram para colaboradores
     try {
@@ -51,8 +38,7 @@ export async function GET(request: Request) {
       }))
 
       const formattedOverdue = overdueInstallments.map(inst => {
-        const diffTime = Math.abs(today.getTime() - new Date(inst.dueDate).getTime())
-        const daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        const daysOverdue = Math.abs(getDaysDiffFromColombiaToday(inst.dueDate, now))
         return {
           clientName: `${inst.loan.client.firstName} ${inst.loan.client.lastName}`,
           amount: inst.expectedAmount - inst.amountPaid,

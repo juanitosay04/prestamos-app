@@ -2,22 +2,22 @@
 
 import { prisma } from "@/lib/prisma"
 import { getSession } from "@/lib/session"
+import { getDaysDiffFromColombiaToday, getColombiaCurrentHour } from "@/lib/dates"
 
 export async function getNotifications() {
   try {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    const threeDaysFromNow = new Date(today)
-    threeDaysFromNow.setDate(today.getDate() + 3)
-    threeDaysFromNow.setHours(23, 59, 59, 999)
+    const now = new Date()
+    const currentColombiaHour = getColombiaCurrentHour(now)
+    // El aviso de cobro del día actual solo se activa al momento de cerrar el día (desde las 5:00 PM / 17:00 hora Colombia)
+    const isEndOfDayCloseTime = currentColombiaHour >= 17
 
-    // Buscar cuotas pendientes o en mora que estén vencidas, venzan hoy, o venzan en los próximos 3 días
+    // Buscar cuotas pendientes/parciales únicamente de préstamos activos o en mora (excluyendo eliminados, pagados, refinanciados o en pérdida)
     const installments = await prisma.installment.findMany({
       where: {
-        status: { in: ["PENDING", "OVERDUE"] },
-        dueDate: {
-          lte: threeDaysFromNow
+        status: { in: ["PENDING", "PARTIAL", "OVERDUE", "LATE"] },
+        loan: {
+          deletedAt: null,
+          status: { in: ["ACTIVE", "OVERDUE"] }
         }
       },
       include: {
@@ -32,37 +32,42 @@ export async function getNotifications() {
       }
     })
 
-    const notifications = installments.map(inst => {
-      const due = new Date(inst.dueDate)
-      due.setHours(0, 0, 0, 0)
-      
-      const diffTime = due.getTime() - today.getTime()
-      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
-      
-      let type = ""
-      if (diffDays < 0) type = "OVERDUE"
-      else if (diffDays === 0) type = "TODAY"
-      else type = "UPCOMING"
+    const notifications: any[] = []
 
-      return {
+    for (const inst of installments) {
+      const diffDays = getDaysDiffFromColombiaToday(inst.dueDate, now)
+
+      // No notificar días antes de la fecha de pago
+      if (diffDays > 0) {
+        continue
+      }
+
+      // Si vence HOY, solo notificar al momento de cerrar el día (no antes en la mañana/tarde)
+      if (diffDays === 0 && !isEndOfDayCloseTime) {
+        continue
+      }
+
+      const type = diffDays < 0 ? "OVERDUE" : "TODAY"
+      const pendingAmount = Math.max(0, inst.expectedAmount - (inst.amountPaid || 0))
+
+      notifications.push({
         id: inst.id,
         loanId: inst.loanId,
         clientName: `${inst.loan.client.firstName} ${inst.loan.client.lastName}`,
         installmentNumber: inst.installmentNumber,
-        expectedAmount: inst.expectedAmount,
+        expectedAmount: pendingAmount,
         dueDate: inst.dueDate,
         type,
         daysLate: diffDays < 0 ? Math.abs(diffDays) : 0,
-        daysUpcoming: diffDays > 0 ? diffDays : 0,
+        daysUpcoming: 0,
         isSystem: false
-      }
-    })
+      })
+    }
 
     const session = await getSession()
     if (session && session.role === "ADMIN") {
-      const yesterday = new Date()
-      yesterday.setDate(yesterday.getDate() - 1)
-      
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
       const auditLogs = await prisma.auditLog.findMany({
         where: {
           action: { in: ["CREATE_LOAN", "CREATE_CLIENT"] },

@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { runMonthlyCloseCheck } from "@/app/actions/financialClose"
+import { getDaysDiffFromColombiaToday } from "@/lib/dates"
 import Link from "next/link"
 
 export default async function Dashboard() {
@@ -55,11 +56,10 @@ export default async function Dashboard() {
         totalOutstandingCapital += inst.principalPart
       }
 
-      // Comprobar moras
+      // Comprobar moras (solo si el día de pago ya cerró en Colombia: diffDays < 0)
       if (inst.status !== "PAID") {
-        const dueDate = new Date(inst.dueDate)
-        dueDate.setHours(0, 0, 0, 0)
-        if (dueDate.getTime() < today.getTime()) {
+        const diffDays = getDaysDiffFromColombiaToday(inst.dueDate, today)
+        if (diffDays < 0) {
           loanHasOverdue = true
           totalOverdueDebt += (inst.expectedAmount - inst.amountPaid)
         }

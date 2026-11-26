@@ -7,6 +7,7 @@ import { payInstallment } from "@/app/actions/payment"
 import { useReactToPrint } from "react-to-print"
 import { ReceiptTemplate, ReceiptPreview, ReceiptData } from "@/components/ReceiptTemplate"
 import { CurrencyInput } from "@/components/ui/CurrencyInput"
+import { getDaysDiffFromColombiaToday } from "@/lib/dates"
 import toast from "react-hot-toast"
 
 export function PayInstallmentButton({ 
@@ -51,11 +52,10 @@ export function PayInstallmentButton({
     setMounted(true)
   }, [])
   
-  // Calcular mora sugerida
-  const today = defaultedAt ? new Date(defaultedAt) : new Date()
-  const due = new Date(dueDate)
-  const diffTime = today.getTime() - due.getTime()
-  const daysLate = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)))
+  // Calcular mora sugerida únicamente si ya cerró el día de pago (diffDays < 0 en calendario Colombia)
+  const referenceDate = defaultedAt ? new Date(defaultedAt) : new Date()
+  const diffDays = getDaysDiffFromColombiaToday(dueDate, referenceDate)
+  const daysLate = diffDays < 0 ? Math.abs(diffDays) : 0
   const suggestedMora = daysLate * 2000
 
   const [moraToPay, setMoraToPay] = useState(suggestedMora.toString())

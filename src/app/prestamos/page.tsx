@@ -10,6 +10,7 @@ import { NewLoanButton } from "./NewLoanButton"
 import { MonthFilter } from "./MonthFilter"
 import { StatusFilter } from "./StatusFilter"
 import { PrestamosTableClient } from "./PrestamosTableClient"
+import { getDaysDiffFromColombiaToday } from "@/lib/dates"
 
 export default async function PrestamosPage({ searchParams }: { searchParams: Promise<{ month?: string, year?: string, status?: string }> }) {
   const { month, year, status } = await searchParams
@@ -39,10 +40,8 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
     name: i.name
   }))
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  // Compute derived status for each loan
+  // Compute derived status for each loan (usando calendario de Colombia para que no cambie de día antes de medianoche)
+  const now = new Date()
   const enrichedLoans = allLoans.map(loan => {
     let derivedStatus = "Al día"
     let statusColor = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
@@ -61,12 +60,9 @@ export default async function PrestamosPage({ searchParams }: { searchParams: Pr
       statusColor = "bg-slate-500/10 text-slate-400 border-slate-500/20"
       statusIcon = <CheckCircle2 className="h-3 w-3" />
     } else {
-      const pendingInst = loan.installments.find(i => i.status === "PENDING")
+      const pendingInst = loan.installments.find(i => i.status !== "PAID")
       if (pendingInst) {
-        const dueDate = new Date(pendingInst.dueDate)
-        dueDate.setHours(0, 0, 0, 0)
-        const diffTime = dueDate.getTime() - today.getTime()
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        const diffDays = getDaysDiffFromColombiaToday(pendingInst.dueDate, now)
 
         if (diffDays < 0) {
           if (diffDays <= -30) {

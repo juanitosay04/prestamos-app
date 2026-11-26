@@ -15,6 +15,7 @@ import { MarkDefaultedButton, ReviveLoanButton } from "./DefaultLoanButtons"
 import { PromissoryNoteCard } from "./PromissoryNoteCard"
 import { EarlyPayoffButton } from "./EarlyPayoffButton"
 import { getSession } from "@/lib/session"
+import { getDaysDiffFromColombiaToday, formatInstallmentDate } from "@/lib/dates"
 
 export default async function LoanDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -576,17 +577,20 @@ export default async function LoanDetailsPage({ params }: { params: Promise<{ id
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {loan.installments.map((inst) => {
-                      const isOverdue = inst.status === "PENDING" && new Date(inst.dueDate) < new Date()
+                      const diffDays = getDaysDiffFromColombiaToday(inst.dueDate)
+                      const isOverdue = inst.status !== "PAID" && diffDays < 0
+                      const isDueToday = inst.status !== "PAID" && diffDays === 0
                       return (
                         <tr key={inst.id} className="hover:bg-white/5 transition-colors">
                           <td className="px-6 py-4 font-medium text-white">
                             Cuota {inst.installmentNumber}
                           </td>
                           <td className="px-6 py-4">
-                            <span className={`${isOverdue ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
-                              {new Date(inst.dueDate).toLocaleDateString()}
+                            <span className={`${isOverdue ? 'text-destructive font-bold' : isDueToday ? 'text-amber-400 font-semibold' : 'text-muted-foreground'}`}>
+                              {formatInstallmentDate(inst.dueDate)}
                             </span>
                             {isOverdue && <span className="ml-2 text-[10px] bg-destructive/20 text-destructive px-1.5 py-0.5 rounded font-bold uppercase">Vencida</span>}
+                            {isDueToday && <span className="ml-2 text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold uppercase">Hoy es día de pago</span>}
                           </td>
                           <td className="px-6 py-4 text-white font-bold">
                             ${(inst.expectedAmount / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

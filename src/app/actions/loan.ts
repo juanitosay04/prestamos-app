@@ -27,7 +27,9 @@ export async function getLoans(month?: number, year?: number) {
       orderBy: { createdAt: "desc" },
       include: {
         client: true,
-        installments: true,
+        installments: {
+          orderBy: { installmentNumber: "asc" }
+        },
         investors: {
           include: {
             investor: true
